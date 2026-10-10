@@ -1,0 +1,27 @@
+# StrategyLab AI: API and web UI side by side.
+#   docker compose up -d --build    build both images and start them
+#   docker compose logs -f          watch the logs
+#   docker compose down             stop and remove the containers
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - path: backend/.env  # team key; optional so the app still starts without it
+        required: false
+    volumes:
+      - strategylab-data:/app/data  # SQLite database and candle cache survive restarts
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000  # "backend" resolves to the service above
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  strategylab-data:
