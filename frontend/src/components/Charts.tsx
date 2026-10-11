@@ -70,34 +70,35 @@ export function PriceChart({ run, selectedTrade, onSelectTrade }: { run: Backtes
     // Matched signal candles (dots), then the fills they led to (arrows).
     const markers: SeriesMarker<Time>[] = run.signals.map((s) => ({
       time: s.time as UTCTimestamp,
-      position: "belowBar",
+      position: run.strategy.direction === "short" ? "aboveBar" : "belowBar",
       shape: "circle",
       color: s.acted ? "#4f8cff" : "#5b6578",
       size: 0.5,
     }));
     for (const trade of run.trades) {
+      const short = trade.direction === "short";
       markers.push({
         id: `entry-${trade.id}`,
         time: trade.entry_time as UTCTimestamp,
-        position: "belowBar",
-        shape: "arrowUp",
+        position: short ? "aboveBar" : "belowBar",
+        shape: short ? "arrowDown" : "arrowUp",
         color: "#4f8cff",
-        text: `BUY / ENTRY #${trade.id} @ ${trade.entry_price.toFixed(2)}`,
+        text: `${short ? "SELL SHORT" : "BUY"} / ENTRY #${trade.id} @ ${trade.entry_price.toFixed(2)}`,
         size: 2,
       });
       markers.push({
         id: `exit-${trade.id}`,
         time: trade.exit_time as UTCTimestamp,
-        position: "aboveBar",
-        shape: "arrowDown",
+        position: short ? "belowBar" : "aboveBar",
+        shape: short ? "arrowUp" : "arrowDown",
         color: trade.pnl >= 0 ? "#26a69a" : "#ef5350",
-        text: `EXIT #${trade.id} @ ${(trade.final_exit_price ?? trade.exit_price).toFixed(2)} (${trade.exit_reason.replaceAll("_", " ")})`,
+        text: `${short ? "BUY TO COVER" : "SELL"} / EXIT #${trade.id} @ ${(trade.final_exit_price ?? trade.exit_price).toFixed(2)} (${trade.exit_reason.replaceAll("_", " ")})`,
         size: 2,
       });
       for (const exit of trade.exits ?? []) {
         if (exit.reason !== "partial_take_profit") continue;
         markers.push({ id: `partial-${trade.id}`, time: exit.time as UTCTimestamp,
-          position: "aboveBar", shape: "arrowDown", color: "#ffa726", size: 2,
+          position: short ? "belowBar" : "aboveBar", shape: short ? "arrowUp" : "arrowDown", color: "#ffa726", size: 2,
           text: `PARTIAL EXIT #${trade.id}: ${exit.shares} @ ${exit.price.toFixed(2)}` });
       }
     }
@@ -122,10 +123,10 @@ export function PriceChart({ run, selectedTrade, onSelectTrade }: { run: Backtes
     if (!chart.current || !priceSeries.current || !selectedTrade) return;
     const series = priceSeries.current;
     const entryLine = series.createPriceLine({ price: selectedTrade.entry_price, color: "#4f8cff",
-      lineWidth: 2, axisLabelVisible: true, title: `BUY / ENTRY #${selectedTrade.id}` });
+      lineWidth: 2, axisLabelVisible: true, title: `${selectedTrade.direction === "short" ? "SELL SHORT" : "BUY"} / ENTRY #${selectedTrade.id}` });
     const exitLine = series.createPriceLine({ price: selectedTrade.final_exit_price ?? selectedTrade.exit_price,
       color: selectedTrade.pnl >= 0 ? "#26a69a" : "#ef5350", lineWidth: 2,
-      axisLabelVisible: true, title: `EXIT #${selectedTrade.id}` });
+      axisLabelVisible: true, title: `${selectedTrade.direction === "short" ? "BUY TO COVER" : "SELL"} / EXIT #${selectedTrade.id}` });
     const padding = 25 * CANDLE_SECONDS[run.strategy.timeframe];
     chart.current.timeScale().setVisibleRange({
       from: (selectedTrade.signal_time - padding) as UTCTimestamp,
@@ -148,7 +149,7 @@ export function PriceChart({ run, selectedTrade, onSelectTrade }: { run: Backtes
           if (trade) onSelectTrade(trade);
         }}>
           <option value="" disabled>Select a trade</option>
-          {run.trades.map((t) => <option key={t.id} value={t.id}>#{t.id}: Buy {t.entry_price.toFixed(2)} → Exit {(t.final_exit_price ?? t.exit_price).toFixed(2)}</option>)}
+          {run.trades.map((t) => <option key={t.id} value={t.id}>#{t.id}: {t.direction === "short" ? "Sell short" : "Buy"} {t.entry_price.toFixed(2)} → Exit {(t.final_exit_price ?? t.exit_price).toFixed(2)}</option>)}
         </select>
       </label>}
       <button onClick={() => chart.current?.timeScale().fitContent()}>Show full history</button>
@@ -159,11 +160,11 @@ export function PriceChart({ run, selectedTrade, onSelectTrade }: { run: Backtes
           ? `${run.strategy.symbol === "XAUUSD" ? "Quote activity" : "Volume"}: ${(hoverVolume ?? latestVolume)?.toLocaleString() ?? "unavailable"}` : ""}
       </span>
     </div>
-    <p className="muted">Blue ↑ = Buy / Entry · Green or red ↓ = Exit · Small dots = entry signals. Click an arrow or select a trade to inspect its fill prices.</p>
+    <p className="muted">Blue arrows mark entries; green/red arrows mark exits. Up arrows are buys, down arrows are sells. Short entries say SELL SHORT and their exits say BUY TO COVER. Click a marker to inspect a trade.</p>
     {selectedTrade && <div className="notice" style={{ marginBottom: 12 }}>
       <strong>Trade #{selectedTrade.id}</strong>
-      <div><span style={{ color: "#4f8cff" }}>BUY / ENTRY</span> {money(selectedTrade.entry_price)} · {formatTime(selectedTrade.entry_time)} UTC</div>
-      <div><span className={selectedTrade.pnl >= 0 ? "good" : "bad"}>EXIT</span> {money(selectedTrade.final_exit_price ?? selectedTrade.exit_price)} · {formatTime(selectedTrade.exit_time)} UTC · {selectedTrade.exit_reason.replaceAll("_", " ")}</div>
+      <div><span style={{ color: "#4f8cff" }}>{selectedTrade.direction === "short" ? "SELL SHORT / ENTRY" : "BUY / ENTRY"}</span> {money(selectedTrade.entry_price)} · {formatTime(selectedTrade.entry_time)} UTC</div>
+      <div><span className={selectedTrade.pnl >= 0 ? "good" : "bad"}>{selectedTrade.direction === "short" ? "BUY TO COVER / EXIT" : "SELL / EXIT"}</span> {money(selectedTrade.final_exit_price ?? selectedTrade.exit_price)} · {formatTime(selectedTrade.exit_time)} UTC · {selectedTrade.exit_reason.replaceAll("_", " ")}</div>
       <div>P&amp;L: <span className={selectedTrade.pnl >= 0 ? "good" : "bad"}>{money(selectedTrade.pnl)}</span></div>
     </div>}
     <div ref={container} className="chart" />

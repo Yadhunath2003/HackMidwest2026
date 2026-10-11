@@ -29,6 +29,7 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
   const entry = strategy.entry;
   const candle = entry.candle_conditions;
   const isCrossover = entry.type === "ema_crossover" || entry.type === "sma_crossover";
+  const short = strategy.direction === "short";
   const isReference = entry.type === "ai_reference_breakout";
   const set = (patch: Partial<Strategy>) => onChange({ ...strategy, ...patch, volume_basis: strategy.symbol === "XAUUSD" ? "quote" : "traded" });
   const setEntry = (patch: Partial<Entry>) => set({ entry: { ...entry, ...patch } });
@@ -51,7 +52,7 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
       if (type === "candle_only") {
         next.candle_conditions = candle ?? preset;
         delete next.pullback_breakout;
-      } else if (type === "bullish_pullback_breakout") {
+      } else if (type === "bullish_pullback_breakout" || type === "bearish_pullback_breakout") {
         next.pullback_breakout = entry.pullback_breakout ?? {
           rally_min_candles: 3, pullback_min_candles: 1, pullback_max_candles: 3, breakout_by: "close",
         };
@@ -66,12 +67,18 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
         };
       }
     }
-    set({ entry: next, exit_on_reverse_crossover: type === "ema_crossover" || type === "sma_crossover" ? strategy.exit_on_reverse_crossover : false,
+    set({ entry: next, ...(type === "bearish_pullback_breakout" ? { direction: "short" as const } : type === "bullish_pullback_breakout" ? { direction: "long" as const } : {}), exit_on_reverse_crossover: type === "ema_crossover" || type === "sma_crossover" ? strategy.exit_on_reverse_crossover : false,
       ...(type !== "ai_reference_breakout" && strategy.partial_exit?.basis === "account" ? { partial_exit: { ...strategy.partial_exit, basis: "price" } } : {}) });
   }
 
   return <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
     <h3>Market</h3>
+    <label>Trade direction<select value={strategy.direction ?? "long"} onChange={(e) => {
+      const direction = e.target.value as "long" | "short";
+      const type = entry.pullback_breakout ? (direction === "short" ? "bearish_pullback_breakout" : "bullish_pullback_breakout") : entry.type;
+      set({ direction, entry: { ...entry, type } });
+    }}><option value="long">Long (buy to open)</option><option value="short">Short (sell to open)</option></select></label>
+    {strategy.direction === "short" && <p className="muted">Hypothetical short positions reserve collateral equal to entry value. Borrow costs, funding and broker availability are not modeled.</p>}
     <div className="grid">
       <label>Symbol<select value={strategy.symbol} onChange={(e) => {
         const symbol = e.target.value as Strategy["symbol"];
@@ -90,6 +97,7 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
       <label>Entry rule<select value={entry.type} onChange={(e) => setType(e.target.value as Entry["type"])}>
         <option value="ema_crossover">EMA crossover</option><option value="sma_crossover">SMA crossover</option>
         <option value="candle_only">Candle conditions only</option><option value="bullish_pullback_breakout">Bullish rally / pullback / breakout</option>
+        <option value="bearish_pullback_breakout">Bearish rally / pullback / breakdown</option>
         <option value="ai_reference_breakout">AI high-volume reference breakout</option>
       </select></label>
       {isCrossover && <>
@@ -109,17 +117,17 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
     {entry.pullback_breakout && <>
       <h3>Rally and pullback</h3>
       <div className="grid">
-        <NumberField label="Minimum green candles" value={entry.pullback_breakout.rally_min_candles} min={2} max={100} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, rally_min_candles: v } })} />
-        <NumberField label="Minimum red candles" value={entry.pullback_breakout.pullback_min_candles} min={1} max={50} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, pullback_min_candles: v } })} />
-        <NumberField label="Maximum red candles" value={entry.pullback_breakout.pullback_max_candles} min={1} max={50} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, pullback_max_candles: v } })} />
-        <label>Breakout above first red candle high<select value={entry.pullback_breakout.breakout_by} onChange={(e) => setEntry({ pullback_breakout: { ...entry.pullback_breakout!, breakout_by: e.target.value as "close" | "high" } })}>
-          <option value="close">Green candle close</option><option value="high">Green candle high</option>
+        <NumberField label={short ? "Minimum red candles" : "Minimum green candles"} value={entry.pullback_breakout.rally_min_candles} min={2} max={100} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, rally_min_candles: v } })} />
+        <NumberField label={short ? "Minimum green candles" : "Minimum red candles"} value={entry.pullback_breakout.pullback_min_candles} min={1} max={50} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, pullback_min_candles: v } })} />
+        <NumberField label={short ? "Maximum green candles" : "Maximum red candles"} value={entry.pullback_breakout.pullback_max_candles} min={1} max={50} onChange={(v) => v != null && setEntry({ pullback_breakout: { ...entry.pullback_breakout!, pullback_max_candles: v } })} />
+        <label>{short ? "Break below first green candle low" : "Break above first red candle high"}<select value={entry.pullback_breakout.breakout_by} onChange={(e) => setEntry({ pullback_breakout: { ...entry.pullback_breakout!, breakout_by: e.target.value as "close" | "high" } })}>
+          <option value="close">{short ? "Red candle close" : "Green candle close"}</option><option value="high">{short ? "Red candle low" : "Green candle high"}</option>
         </select></label>
       </div>
     </>}
     {entry.reference_breakout && <>
       <h3>High-volume reference and account risk</h3>
-      <p className="muted">AI must detect a bearish trend at the red reference candle and a bullish trend at the green breakout. Stop = marked low; target = net account gain. A low touch invalidates the setup; newer qualifying references replace older ones.</p>
+      <p className="muted">{short ? "Green reference in AI bullish trend; red breakout below marked low in AI bearish trend. Stop at marked high; a high touch invalidates the setup." : "Red reference in AI bearish trend; green breakout above marked high in AI bullish trend. Stop at marked low; a low touch invalidates the setup."} Target is net account gain; newer qualifying references replace older ones.</p>
       <div className="grid">
         {([
           ["reference_volume_min", "Minimum reference volume (× average)", 0.1, 50, 0.1],
@@ -133,7 +141,7 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
           <NumberField key={key} label={label} value={entry.reference_breakout![key]} min={min} max={max} step={step}
             onChange={(v) => v != null && setEntry({ reference_breakout: { ...entry.reference_breakout!, [key]: v } })} />)}
         <label>Breakout trigger<select value={entry.reference_breakout.breakout_by} onChange={(e) => setEntry({ reference_breakout: { ...entry.reference_breakout!, breakout_by: e.target.value as "close" | "high" } })}>
-          <option value="close">Close above marked high</option><option value="high">High above marked high</option>
+          <option value="close">{short ? "Close below marked low" : "Close above marked high"}</option><option value="high">{short ? "Low below marked low" : "High above marked high"}</option>
         </select></label>
       </div>
     </>}
@@ -177,12 +185,12 @@ export default function AdvancedStrategyForm({ strategy, disabled, onChange }: P
     </>}
     <h3>Partial exit</h3>
     <label className="check"><input type="checkbox" checked={strategy.partial_exit != null}
-      onChange={(e) => set({ partial_exit: e.target.checked ? { fraction: 0.5, profit_pct: 1, basis: isReference ? "account" : "price" } : undefined })} />Sell part of the position at a profit trigger</label>
+      onChange={(e) => set({ partial_exit: e.target.checked ? { fraction: 0.5, profit_pct: 1, basis: isReference ? "account" : "price" } : undefined })} />Close part of the position at a profit trigger</label>
     {strategy.partial_exit && <div className="grid">
       <NumberField label="Position to sell (%)" value={strategy.partial_exit.fraction * 100} min={1} max={99} onChange={(v) => v != null && set({ partial_exit: { ...strategy.partial_exit!, fraction: v / 100 } })} />
       <NumberField label="Profit trigger (%)" value={strategy.partial_exit.profit_pct} min={0.01} max={200} step={0.25} onChange={(v) => v != null && set({ partial_exit: { ...strategy.partial_exit!, profit_pct: v } })} />
       <label>Trigger basis<select value={strategy.partial_exit.basis} onChange={(e) => set({ partial_exit: { ...strategy.partial_exit!, basis: e.target.value as "price" | "account" } })}>
-        <option value="price">Price rise from entry</option>{isReference && <option value="account">Net account gain if fully liquidated</option>}
+        <option value="price">{short ? "Price fall from entry" : "Price rise from entry"}</option>{isReference && <option value="account">Net account gain if fully liquidated</option>}
       </select></label>
     </div>}
   </fieldset>;

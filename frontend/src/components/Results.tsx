@@ -91,9 +91,9 @@ export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
         Backtest results <span className="tag">simulation · run {run.id}</span>
       </h2>
       <MetricCards metrics={metrics} />
-      {run.strategy.partial_exit && <p className="muted">Each trade includes all of its sell fills. Exit price is the quantity-weighted average; the chart marks each partial sale and the final exit separately.</p>}
+      {run.strategy.partial_exit && <p className="muted">Each trade includes all of its closing fills. Exit price is the quantity-weighted average; the chart marks each partial close and the final exit separately.</p>}
       {selectedTrade?.exits && selectedTrade.exits.length > 1 && <div className="notice">
-        Trade #{selectedTrade.id} sell fills:
+        Trade #{selectedTrade.id} closing fills:
         <ul>{selectedTrade.exits.map((exit, i) => <li key={i}>{formatTime(exit.time)} UTC · {exit.reason.replaceAll("_", " ")} · {exit.shares} units at {money(exit.price)} · fee {money(exit.fee)}</li>)}</ul>
       </div>}
       {selectedTrade?.partial_exit_skipped && <p className="muted">{selectedTrade.partial_exit_skipped}</p>}
@@ -158,7 +158,7 @@ export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
                 className={`clickable ${selectedTrade?.id === trade.id ? "selected" : ""}`}
                 onClick={() => onSelectTrade(trade)}
               >
-                <td>{trade.id}</td>
+                <td>{trade.id} - {trade.direction === "short" ? "Short" : "Long"}</td>
                 <td>{formatTime(trade.entry_time)}</td>
                 <td>{trade.entry_price.toFixed(2)}</td>
                 <td>{trade.exit_price.toFixed(2)}</td>

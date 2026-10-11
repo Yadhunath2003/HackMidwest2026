@@ -1,7 +1,6 @@
 """Persistent signal-only paper sessions. Never sends orders to a broker."""
 import copy
 import logging
-import math
 import threading
 import time
 import uuid
@@ -10,6 +9,7 @@ from datetime import datetime, timezone
 from . import ai_trends, live_data, storage
 from .engine import compute_features, entry_signal, _crossed
 from .schemas import Strategy, ExecutionSettings
+from .execution import sign, entry_terms, account_target, close_value
 
 
 def create(saved):
@@ -41,6 +41,7 @@ def public(session):
 def emit(state, side, candle, quantity, price, reason):
     state['signals'].append({'id':uuid.uuid4().hex[:12],'side':side,'time':candle['time'],
         'detected_at':datetime.now(timezone.utc).isoformat(),'quantity':quantity,'price':round(price,4),
+        'direction':state['strategy'].get('direction','long'),'action':('entry' if (side=='BUY') == (state['strategy'].get('direction','long')=='long') else 'exit'),
         'reason':reason,'stop':state['position']['stop'] if state['position'] else None,
         'target':state['position']['target'] if state['position'] else None})
 
@@ -48,29 +49,29 @@ def emit(state, side, candle, quantity, price, reason):
 def protect(state,candle,strategy,execution):
     pos=state['position']
     if not pos:return
-    slip=execution.slippage_bps/10000;fee=execution.commission_per_order_usd
+    slip=execution.slippage_bps/10000;fee=execution.commission_per_order_usd;d=sign(strategy)
     def sell(quantity,raw,reason):
-        fill=raw*(1-slip)
-        emit(state,'SELL',candle,quantity,fill,reason)
-        state['cash']+=quantity*fill-fee
-        pos['realized']+=quantity*(fill-pos['entry_price'])-fee
+        fill=raw*(1-d*slip)
+        emit(state,'SELL' if d==1 else 'BUY',candle,quantity,fill,reason)
+        state['cash']+=close_value(quantity,pos['entry_price'],fill,d)-fee
+        pos['realized']+=d*quantity*(fill-pos['entry_price'])-fee
         pos['quantity']=round(pos['quantity']-quantity,8)
         if pos['quantity']==0:state['position']=None
     def partial(raw):
         sell(pos['partial_quantity'],raw,'Partial profit target reached')
         del pos['partial_price']
         if pos.get('target_profit'):
-            pos['target']=(pos['entry_price']+(pos['target_profit']-pos['realized']+fee)/pos['quantity'])/(1-slip)
-    if 'partial_price' in pos and candle['open']>=pos['partial_price']:partial(candle['open'])
-    if candle['time']!=pos['entry_time'] and candle['open']<=pos['stop']:
-        sell(pos['quantity'],candle['open'],'Opened below stop')
-    elif candle['time']!=pos['entry_time'] and candle['open']>=pos['target']:
-        sell(pos['quantity'],candle['open'],'Opened above profit target')
-    elif candle['low']<=pos['stop']:
+            pos['target']=account_target(pos['entry_price'],pos['target_profit']-pos['realized'],fee,pos['quantity'],d,slip)
+    if 'partial_price' in pos and d*(candle['open']-pos['partial_price'])>=0:partial(candle['open'])
+    if candle['time']!=pos['entry_time'] and d*(candle['open']-pos['stop'])<=0:
+        sell(pos['quantity'],candle['open'],'Opened beyond stop')
+    elif candle['time']!=pos['entry_time'] and d*(candle['open']-pos['target'])>=0:
+        sell(pos['quantity'],candle['open'],'Opened beyond profit target')
+    elif (candle['low']<=pos['stop'] if d==1 else candle['high']>=pos['stop']):
         sell(pos['quantity'],pos['stop'],'Stop reached; stop takes priority when both levels are touched')
     else:
-        if 'partial_price' in pos and candle['high']>=pos['partial_price']:partial(pos['partial_price'])
-        if candle['high']>=pos['target']:sell(pos['quantity'],pos['target'],'Profit target reached')
+        if 'partial_price' in pos and (candle['high']>=pos['partial_price'] if d==1 else candle['low']<=pos['partial_price']):partial(pos['partial_price'])
+        if (candle['high']>=pos['target'] if d==1 else candle['low']<=pos['target']):sell(pos['quantity'],pos['target'],'Profit target reached')
 
 
 def fill_pending(state,candle,strategy,execution):
@@ -78,41 +79,29 @@ def fill_pending(state,candle,strategy,execution):
     if not pending:return
     if candle['time']<=pending['time']:return
     state['pending']=None
-    slip=execution.slippage_bps/10000;fee=execution.commission_per_order_usd
-    if pending['side']=='SELL':
+    slip=execution.slippage_bps/10000;fee=execution.commission_per_order_usd;d=sign(strategy)
+    if pending.get('action')=='exit' or (pending.get('action') is None and pending['side']=='SELL'):
         pos=state['position']
         if pos:
-            price=candle['open']*(1-slip)
-            emit(state,'SELL',candle,pos['quantity'],price,'Reverse crossover; next open')
-            state['cash']+=pos['quantity']*price-fee;state['position']=None
+            price=candle['open']*(1-d*slip)
+            emit(state,'SELL' if d==1 else 'BUY',candle,pos['quantity'],price,'Reverse crossover; next open')
+            state['cash']+=close_value(pos['quantity'],pos['entry_price'],price,d)-fee
+            state['position']=None
         return
     if state['position']:return
-    fill=candle['open']*(1+slip);cash=state['cash'];unit=.00000001 if strategy.symbol=='BTCUSD' else .01 if strategy.symbol=='XAUUSD' else 1
-    stop=fill*(1-strategy.stop_loss_pct/100);target=fill*(1+strategy.take_profit_pct/100)
-    quantity=math.floor(strategy.position_size_usd/fill/unit)*unit
-    profit=None;fees=(3 if strategy.partial_exit else 2)*fee
-    if strategy.entry.reference_breakout:
-        stop=pending['reference']['low'];rules=strategy.entry.reference_breakout
-        if candle['open']<=stop or fill<=stop:return
-        risk=cash*rules.risk_account_pct/100;profit=cash*rules.target_account_pct/100
-        quantity=min(math.floor((cash-fee)/fill/unit),max(0,math.floor((risk-fees)/(fill-stop*(1-slip))/unit)))*unit
-        if quantity:target=(fill+(profit+fees)/quantity)/(1-slip)
-    quantity=round(quantity,8)
-    if quantity<unit or quantity*fill+fee>cash:return
-    pos={'quantity':quantity,'entry_time':candle['time'],'entry_price':fill,'stop':stop,'target':target,
-         'target_profit':profit,'realized':-fee}
-    if strategy.partial_exit:
-        partial=strategy.partial_exit
-        size=round(math.floor(quantity*partial.fraction/unit+1e-9)*unit,8)
-        price=fill*(1+partial.profit_pct/100) if partial.basis=='price' else (fill+(cash*partial.profit_pct/100+3*fee)/quantity)/(1-slip)
-        if size>=unit and quantity-size>=unit-1e-9 and price<target:
-            pos.update(partial_quantity=size,partial_price=price)
-        elif profit:pos['target']=(fill+(profit+2*fee)/quantity)/(1-slip)
+    terms,error=entry_terms(strategy,execution,candle['open'],state['cash'],pending.get('reference'))
+    if error:
+        state['message']=error
+        return
+    quantity,fill=terms['quantity'],terms['entry_price']
+    pos={**terms,'direction':strategy.direction,'entry_time':candle['time'],'realized':-fee}
     state['position']=pos;state['cash']-=quantity*fill+fee
-    emit(state,'BUY',candle,quantity,fill,'Strategy entry at the next candle open (paper simulation)')
+    emit(state,'BUY' if d==1 else 'SELL',candle,quantity,fill,
+         'Long entry at next open' if d==1 else 'Sell short at next open (paper simulation)')
 
 
 def process(state,candle,strategy,execution):
+    d=sign(strategy)
     fill_pending(state,candle,strategy,execution)
     protect(state,candle,strategy,execution)
     history=state['history']+[candle]
@@ -124,23 +113,23 @@ def process(state,candle,strategy,execution):
         rules=strategy.entry.reference_breakout
         triggered=False
         if rules:
-            if state['marked'] and candle['low']<=state['marked']['low']:state['marked']=None
+            if state['marked'] and (candle['low']<=state['marked']['low'] if d==1 else candle['high']>=state['marked']['high']):state['marked']=None
             rvol=features['rvol'][i]
-            if candle['close']<candle['open'] and rvol is not None and rvol>=rules.reference_volume_min:
-                if trend('bearish',rules.context_candles,rules.min_confidence):state['marked']=candle
-            elif state['marked'] and candle['close']>candle['open']:
+            if d*(candle['close']-candle['open'])<0 and rvol is not None and rvol>=rules.reference_volume_min:
+                if trend('bearish' if d==1 else 'bullish',rules.context_candles,rules.min_confidence):state['marked']=candle
+            elif state['marked'] and d*(candle['close']-candle['open'])>0:
                 body=features['anatomy'][i]['body_to_range']
-                if body is not None and body>=rules.momentum_body_min and candle[rules.breakout_by]>state['marked']['high']:
-                    triggered=trend('bullish',rules.context_candles,rules.min_confidence)
+                if body is not None and body>=rules.momentum_body_min and d*(candle[rules.breakout_by if d==1 or rules.breakout_by=='close' else 'low']-state['marked']['high' if d==1 else 'low'])>0:
+                    triggered=trend('bullish' if d==1 else 'bearish',rules.context_candles,rules.min_confidence)
         else:
             triggered=entry_signal(features,i,strategy)
             t=strategy.entry.ai_trend
             if triggered and t:triggered=trend(t.direction,t.context_candles,t.min_confidence)
         if triggered:
-            state['pending']={'side':'BUY','time':candle['time'],'reference':state['marked']}
+            state['pending']={'action':'entry','side':'BUY' if d==1 else 'SELL','time':candle['time'],'reference':state['marked']}
             state['marked']=None
-    elif strategy.exit_on_reverse_crossover and _crossed(features,i,up=False):
-        state['pending']={'side':'SELL','time':candle['time']}
+    elif strategy.exit_on_reverse_crossover and _crossed(features,i,up=d==-1):
+        state['pending']={'action':'exit','side':'SELL' if d==1 else 'BUY','time':candle['time']}
     state['history']=history[-max(1200, strategy.entry.ai_trend.context_candles+100 if strategy.entry.ai_trend else 1200):]
     state['last_candle']=candle['time']
 

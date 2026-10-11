@@ -74,11 +74,11 @@ export default function LivePage() {
       <p className="muted">Last completed candle: {session.last_candle ? formatTime(session.last_candle) + " UTC" : "Waiting"} · Last check: {new Date(session.updated_at).toLocaleTimeString()}</p>
       {session.error && <div className="notice error" role="alert">{session.error}</div>}
       <LiveChart session={session} />
-      {session.position ? <p>Virtual position: {session.position.quantity} {session.strategy.symbol === "BTCUSD" ? "BTC" : session.strategy.symbol === "XAUUSD" ? "ounces" : "shares"} · Entry {money(session.position.entry_price)} · Stop {money(session.position.stop)} · Target {money(session.position.target)}</p> : <p>No open virtual position.</p>}
+      {session.position ? <p>Virtual {session.strategy.direction === "short" ? "short" : "long"} position: {session.position.quantity} {session.strategy.symbol === "BTCUSD" ? "BTC" : session.strategy.symbol === "XAUUSD" ? "ounces" : "shares"} · Entry {money(session.position.entry_price)} · Stop {money(session.position.stop)} · Target {money(session.position.target)}</p> : <p>No open virtual position.</p>}
       <h2 style={{ marginTop: 24 }}>Buy and sell signals</h2>
       {session.signals.length === 0 ? <p className="muted">No signals yet. Waiting for this strategy’s conditions.</p> : <div style={{ overflowX: "auto" }}><table>
         <thead><tr><th>Signal</th><th>Candle time (UTC)</th><th>Detected (UTC)</th><th>Paper price</th><th>Quantity</th><th>Reason</th></tr></thead>
-        <tbody>{[...session.signals].reverse().map((signal) => <tr key={signal.id}><td style={{ color: signal.side === "BUY" ? "var(--good)" : "var(--bad)", fontWeight: 700 }}>{signal.side}</td><td>{formatTime(signal.time)}</td><td>{signal.detected_at.slice(0, 19).replace("T", " ")}</td><td>{money(signal.price)}</td><td>{signal.quantity}</td><td>{signal.reason}</td></tr>)}</tbody>
+        <tbody>{[...session.signals].reverse().map((signal) => <tr key={signal.id}><td style={{ color: signal.side === "BUY" ? "var(--good)" : "var(--bad)", fontWeight: 700 }}>{signal.direction === "short" ? (signal.action === "entry" ? "SELL SHORT" : "BUY TO COVER") : signal.side}</td><td>{formatTime(signal.time)}</td><td>{signal.detected_at.slice(0, 19).replace("T", " ")}</td><td>{money(signal.price)}</td><td>{signal.quantity}</td><td>{signal.reason}</td></tr>)}</tbody>
       </table></div>}
       <p className="muted">Stopping freezes this session; it does not issue a sell signal. Saved sessions survive a backend restart. This app must remain running to monitor prices.</p>
     </section>}

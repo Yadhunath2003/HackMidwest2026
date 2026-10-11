@@ -1,4 +1,4 @@
-"""Deterministic long-only backtest engine.
+"""Deterministic long or short backtest engine.
 
 Timeline for candle i:
   1. An entry or reverse-crossover exit decided at the close of candle i-1 fills at the open of i.
@@ -6,13 +6,13 @@ Timeline for candle i:
   3. At the close of candle i, signals are evaluated using data up to and including i only.
 """
 
-import math
 from datetime import datetime, timezone
 
 from . import indicators
 from .schemas import ExecutionSettings, Strategy, describe_assumptions
+from .execution import sign, entry_terms, account_target, close_value
 
-STRATEGY_VERSION = "1"
+STRATEGY_VERSION = "2"
 
 
 def compute_features(candles: list[dict], strategy: Strategy) -> dict:
@@ -35,11 +35,21 @@ def compute_features(candles: list[dict], strategy: Strategy) -> dict:
         "rvol_lookback": lookback,
         "anatomy": [indicators.candle_anatomy(c["open"], c["high"], c["low"], c["close"]) for c in candles],
         "pattern": [_pullback_pattern(candles, i, strategy) for i in range(len(candles))]
-        if entry.type == "bullish_pullback_breakout" else [None] * len(candles),
+        if entry.type in ("bullish_pullback_breakout", "bearish_pullback_breakout") else [None] * len(candles),
     }
 
 
 def _pullback_pattern(candles: list[dict], i: int, strategy: Strategy) -> dict | None:
+    if strategy.direction == 'short':
+        # Reflect only pattern comparisons, keeping original prices in evidence.
+        mirrored = [{**c, 'open': -c['open'], 'close': -c['close'], 'high': -c['low'], 'low': -c['high']} for c in candles[max(0, i - strategy.entry.pullback_breakout.pullback_max_candles - strategy.entry.pullback_breakout.rally_min_candles):i + 1]]
+        long = strategy.model_copy(update={'direction': 'long'})
+        pattern = _pullback_pattern(mirrored, len(mirrored) - 1, long)
+        if pattern:
+            pattern.update(direction='short', first_green_time=pattern.pop('first_red_time'),
+                           first_green_low=-pattern.pop('first_red_high'), breakout_value=-pattern['breakout_value'],
+                           breakout_by='close' if pattern['breakout_by'] == 'close' else 'low')
+        return pattern
     settings = strategy.entry.pullback_breakout
     if settings is None or candles[i]["close"] <= candles[i]["open"]:
         return None
@@ -104,9 +114,9 @@ def _candle_matches(features: dict, i: int, strategy: Strategy) -> bool:
 
 def entry_signal(features: dict, i: int, strategy: Strategy) -> bool:
     entry = strategy.entry
-    if entry.type == "bullish_pullback_breakout" and features["pattern"][i] is None:
+    if entry.type in ("bullish_pullback_breakout", "bearish_pullback_breakout") and features["pattern"][i] is None:
         return False
-    if entry.type in ("ema_crossover", "sma_crossover") and not _crossed(features, i, up=True):
+    if entry.type in ("ema_crossover", "sma_crossover") and not _crossed(features, i, up=strategy.direction == 'long'):
         return False
     if entry.rsi_below is not None or entry.rsi_above is not None:
         value = features["rsi"][i]
@@ -161,6 +171,7 @@ def run_backtest(
     features["references"] = {}
     trend = strategy.entry.ai_trend
     reference_settings = strategy.entry.reference_breakout
+    d = sign(strategy)
     marked: dict | None = None
     def assess_trend(i: int, context_candles: int) -> dict:
         key = str(candles[i]["time"])
@@ -182,21 +193,22 @@ def run_backtest(
                 return False
             settings = reference_settings
             candle = candles[i]
-            if marked and candle["low"] <= marked["low"]:
+            if marked and (candle['low'] <= marked['low'] if d == 1 else candle['high'] >= marked['high']):
                 marked = None
             rvol = features["rvol"][i]
-            if candle["close"] < candle["open"] and rvol is not None and rvol >= settings.reference_volume_min:
+            if d * (candle['close'] - candle['open']) < 0 and rvol is not None and rvol >= settings.reference_volume_min:
                 assessment = assess_trend(i, settings.context_candles)
-                if assessment["direction"] == "bearish" and assessment["confidence"] >= settings.min_confidence:
+                if assessment["direction"] == ('bearish' if d == 1 else 'bullish') and assessment["confidence"] >= settings.min_confidence:
                     marked = {"time": candle["time"], "high": candle["high"], "low": candle["low"],
                               "relative_volume": rvol, "ai_trend": assessment}
                 return False
             body = features["anatomy"][i]["body_to_range"]
-            if (not marked or candle["close"] <= candle["open"] or body is None
-                    or body < settings.momentum_body_min or candle[settings.breakout_by] <= marked["high"]):
+            breakout_field = settings.breakout_by if d == 1 or settings.breakout_by == 'close' else 'low'
+            if (not marked or d * (candle['close'] - candle['open']) <= 0 or body is None
+                    or body < settings.momentum_body_min or d * (candle[breakout_field] - marked['high' if d == 1 else 'low']) <= 0):
                 return False
             assessment = assess_trend(i, settings.context_candles)
-            if assessment["direction"] != "bullish" or assessment["confidence"] < settings.min_confidence:
+            if assessment["direction"] != ('bullish' if d == 1 else 'bearish') or assessment["confidence"] < settings.min_confidence:
                 return False
             features["references"][str(candle["time"])] = {**marked}
             marked = None  # One entry attempt per marked setup.
@@ -221,11 +233,11 @@ def run_backtest(
 
     def sell_quantity(i: int, reference_price: float, shares: float, reason: str, detail: dict) -> float:
         nonlocal cash, position
-        fill = reference_price * (1 - slip)
-        cash += shares * fill - commission
+        fill = reference_price * (1 - d * slip)
+        cash += close_value(shares, position['entry_price'], fill, d) - commission
         position["shares"] = round(position["shares"] - shares, 8)
-        position["realized_net"] += shares * (fill - position["entry_price"]) - commission
-        position["exit_slippage"] += shares * (reference_price - fill)
+        position["realized_net"] += d * shares * (fill - position["entry_price"]) - commission
+        position["exit_slippage"] += d * shares * (reference_price - fill)
         position["exits"].append({"time": candles[i]["time"], "price": round(fill, 4),
                                   "shares": shares, "reason": reason, "fee": commission, **detail})
         position["exit_value"] += shares * fill
@@ -239,6 +251,7 @@ def run_backtest(
         slippage_cost = position["entry_slippage"] + position["exit_slippage"]
         pnl = position["realized_net"]
         trades.append({
+            'direction': strategy.direction,
             "id": len(trades) + 1,
             "signal_time": position["signal_time"],
             "entry_time": position["entry_time"],
@@ -270,75 +283,30 @@ def run_backtest(
         # 1. Fill orders decided at the previous close.
         if position and pending_exit is not None:
             close_position(i, candle["open"], "reverse_crossover", {
-                "trigger": "Fast average crossed below slow average on the previous candle; sold at this open.",
+                "trigger": f"Fast average crossed {'below' if d == 1 else 'above'} slow average on the previous candle; position closed at this open.",
                 "signal": snapshot(candles, features, pending_exit),
             })
         pending_exit = None
 
         if pending_entry is not None and position is None:
-            equity_at_entry = cash
-            fill = candle["open"] * (1 + slip)
-            unit = 0.00000001 if strategy.symbol == "BTCUSD" else 0.01 if strategy.symbol == "XAUUSD" else 1
-            shares = round(math.floor(strategy.position_size_usd / fill / unit) * unit, 8)
-            stop = fill * (1 - strategy.stop_loss_pct / 100)
-            target = fill * (1 + strategy.take_profit_pct / 100)
-            risk_budget = planned_loss = target_profit = None
-            reserved_fees = (3 if strategy.partial_exit else 2) * commission
-            invalid_stop = False
-            if reference_settings:
-                reference = features["references"][str(candles[pending_entry]["time"])]
-                stop = reference["low"]
-                invalid_stop = candle["open"] <= stop or fill <= stop
-                risk_budget = cash * reference_settings.risk_account_pct / 100
-                target_profit = cash * reference_settings.target_account_pct / 100
-                loss_per_share = fill - stop * (1 - slip)
-                affordable = max(0, math.floor((cash - commission) / fill / unit))
-                risk_shares = max(0, math.floor((risk_budget - reserved_fees) / loss_per_share / unit)) if not invalid_stop else 0
-                shares = round(min(affordable, risk_shares) * unit, 8)
-                planned_loss = shares * loss_per_share + reserved_fees
-                if shares:
-                    target = (fill + (target_profit + reserved_fees) / shares) / (1 - slip)
-            if invalid_stop:
-                rejected.append({"time": candle["time"], "reason": "Next open is at or below the marked stop; entry skipped."})
-            elif shares < unit:
-                rejected.append({"time": candle["time"], "reason": "Position size is smaller than the minimum quantity unit."})
-            elif shares * fill + commission > cash:
-                rejected.append({"time": candle["time"], "reason": "Not enough cash for the position and commission."})
+            reference = (features["references"][str(candles[pending_entry]["time"])] if reference_settings else None)
+            terms, error = entry_terms(strategy, execution, candle['open'], cash, reference)
+            if error:
+                rejected.append({'time': candle['time'], 'reason': error})
             else:
+                shares, fill = terms['quantity'], terms['entry_price']
                 cash -= shares * fill + commission
                 position = {
-                    "shares": shares,
-                    "initial_shares": shares,
-                    "realized_net": -commission,
-                    "exit_slippage": 0,
-                    "exit_value": 0,
-                    "exits": [],
-                    "entry_index": i,
-                    "entry_time": candle["time"],
-                    "entry_price": fill,
-                    "entry_slippage": shares * (fill - candle["open"]),
-                    "stop": stop,
-                    "target": target,
-                    "risk_budget": risk_budget,
-                    "planned_stop_loss": planned_loss,
-                    "target_account_profit": target_profit,
-                    "signal_time": candles[pending_entry]["time"],
-                    "entry_evidence": snapshot(candles, features, pending_entry),
+                    **terms,
+                    'direction': strategy.direction,
+                    'shares': shares, 'initial_shares': shares,
+                    'realized_net': -commission, 'exit_slippage': 0, 'exit_value': 0, 'exits': [],
+                    'entry_index': i, 'entry_time': candle['time'],
+                    'entry_slippage': d * shares * (fill - candle['open']),
+                    'target_account_profit': terms['target_profit'],
+                    'signal_time': candles[pending_entry]['time'],
+                    'entry_evidence': snapshot(candles, features, pending_entry),
                 }
-                if strategy.partial_exit:
-                    partial = strategy.partial_exit
-                    quantity = round(math.floor(shares * partial.fraction / unit + 1e-9) * unit, 8)
-                    partial_price = (fill * (1 + partial.profit_pct / 100) if partial.basis == "price"
-                                     else (fill + (equity_at_entry * partial.profit_pct / 100
-                                                   + 3 * commission) / shares) / (1 - slip))
-                    if quantity < unit or shares - quantity < unit - 1e-9 or partial_price >= target:
-                        position["partial_exit_skipped"] = "Partial quantity is too small or its trigger is at/above the final target."
-                        if reference_settings:
-                            position["target"] = (fill + (target_profit + 2 * commission) / shares) / (1 - slip)
-                            position["planned_stop_loss"] = shares * loss_per_share + 2 * commission
-                    else:
-                        position["partial_price"] = partial_price
-                        position["partial_quantity"] = quantity
         pending_entry = None
 
         # 2. Protective exits inside this candle.
@@ -347,33 +315,32 @@ def run_backtest(
             is_entry_candle = position["entry_index"] == i
             def partial_sell(price: float, gap: bool):
                 sell_quantity(i, price, position["partial_quantity"], "partial_take_profit",
-                              {"trigger": "Partial profit target reached; sold part of the position.", "gap": gap})
+                              {"trigger": "Partial profit target reached; closed part of the position.", "gap": gap})
                 del position["partial_price"]
                 if target_profit := position.get("target_account_profit"):
-                    position["target"] = (position["entry_price"] +
-                        (target_profit - position["realized_net"] + commission) / position["shares"]) / (1 - slip)
+                    position['target'] = account_target(position['entry_price'], target_profit - position['realized_net'], commission, position['shares'], d, slip)
 
             # An open above the partial limit is known to happen before the candle's low.
-            if "partial_price" in position and candle["open"] >= position["partial_price"]:
+            if "partial_price" in position and d * (candle['open'] - position['partial_price']) >= 0:
                 partial_sell(candle["open"], not is_entry_candle)
                 target = position["target"]
-            if not is_entry_candle and candle["open"] <= stop:
-                close_position(i, candle["open"], "stop_loss", {"trigger": "Opened below the stop price (gap); sold at the open.", "gap": True})
-            elif not is_entry_candle and candle["open"] >= target:
-                close_position(i, candle["open"], "take_profit", {"trigger": "Opened above the target price (gap); sold at the open.", "gap": True})
-            elif candle["low"] <= stop:
-                both = candle["high"] >= target
+            if not is_entry_candle and d * (candle['open'] - stop) <= 0:
+                close_position(i, candle["open"], "stop_loss", {"trigger": "Opened beyond the stop price (gap); closed at the open.", "gap": True})
+            elif not is_entry_candle and d * (candle['open'] - target) >= 0:
+                close_position(i, candle["open"], "take_profit", {"trigger": "Opened beyond the target price (gap); closed at the open.", "gap": True})
+            elif (candle['low'] <= stop if d == 1 else candle['high'] >= stop):
+                both = (candle['high'] >= target if d == 1 else candle['low'] <= target)
                 close_position(i, stop, "stop_loss", {
-                    "trigger": "Candle low reached the stop price."
-                    + (" The high also reached the target; the stop is assumed to fill first." if both else ""),
+                    "trigger": f"Candle {'low' if d == 1 else 'high'} reached the stop price."
+                    + (" The candle also reached the target; the stop is assumed to fill first." if both else ""),
                     "both_levels_touched": both,
                 })
             else:
-                if "partial_price" in position and candle["high"] >= position["partial_price"]:
+                if "partial_price" in position and (candle['high'] >= position['partial_price'] if d == 1 else candle['low'] <= position['partial_price']):
                     partial_sell(position["partial_price"], False)
                     target = position["target"]
-                if candle["high"] >= target:
-                    close_position(i, target, "take_profit", {"trigger": "Candle high reached the target price."})
+                if (candle['high'] >= target if d == 1 else candle['low'] <= target):
+                    close_position(i, target, "take_profit", {"trigger": f"Candle {'high' if d == 1 else 'low'} reached the target price."})
 
         # 3. Decisions at this candle's close, acted on at the next open.
         if position is None:
@@ -383,13 +350,13 @@ def run_backtest(
         else:
             if signal(i):
                 signals.append({"time": candle["time"], "acted": False})
-            if strategy.exit_on_reverse_crossover and _crossed(features, i, up=False):
+            if strategy.exit_on_reverse_crossover and _crossed(features, i, up=d == -1):
                 pending_exit = i
 
         if position and i == len(candles) - 1:
-            close_position(i, candle["close"], "end_of_data", {"trigger": "Backtest ended with the position open; sold at the last close."})
+            close_position(i, candle["close"], "end_of_data", {"trigger": "Backtest ended with the position open; closed at the last close."})
 
-        held_value = position["shares"] * candle["close"] if position else 0.0
+        held_value = close_value(position['shares'], position['entry_price'], candle['close'], d) if position else 0.0
         equity_curve.append({"time": candle["time"], "equity": round(cash + held_value, 2)})
 
     return {
