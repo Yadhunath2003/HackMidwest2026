@@ -109,7 +109,7 @@ export function PaperSessionPanel({ loaded, saved, selectedId, onSelectStrategy,
             {session.error ? <Notice tone="error" title="Feed error">{session.error}</Notice> : null}
             {session.position ? (
               <div className="grid grid-cols-3 gap-2.5">
-                <MetricCard size="sm" prefix="$" value={session.position.entry_price.toFixed(2)} label="Paper entry" context={`${session.position.quantity} ${unit}`} />
+                <MetricCard size="sm" prefix="$" value={session.position.entry_price.toFixed(2)} label={session.strategy.direction === "short" ? "Short entry" : "Long entry"} context={`${session.position.quantity} ${unit}`} />
                 <MetricCard size="sm" prefix="$" value={session.position.stop.toFixed(2)} label="Stop" />
                 <MetricCard size="sm" prefix="$" value={session.position.target.toFixed(2)} label="Target" />
               </div>

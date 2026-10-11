@@ -69,7 +69,7 @@ export function TradeTable({ trades, symbol, selectedId, onSelect }: {
               className={cn("cursor-pointer outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", selected && "bg-accent shadow-[inset_2px_0_0_var(--brand)]")}
               onClick={() => onSelect(t)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(t); } }}>
-              <td className={cn(TD, NUM)}>{t.id}</td>
+              <td className={cn(TD, NUM)}>{t.id} <span className="text-muted-foreground">{t.direction === "short" ? "Short" : "Long"}</span></td>
               <td className={cn(TD, "font-mono")}>{formatTime(t.entry_time)}</td>
               <td className={cn(TD, NUM)}>{t.entry_price.toFixed(2)}</td>
               <td className={cn(TD, NUM)}>{t.exit_price.toFixed(2)}</td>

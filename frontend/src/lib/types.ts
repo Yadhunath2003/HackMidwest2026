@@ -2,7 +2,7 @@
 
 export type SymbolName = "AAPL" | "SPY" | "TSLA" | "XAUUSD" | "BTCUSD";
 export type Timeframe = "5m" | "30m" | "1h" | "4h" | "1d";
-export type EntryType = "ema_crossover" | "sma_crossover" | "candle_only" | "bullish_pullback_breakout" | "ai_reference_breakout";
+export type EntryType = "ema_crossover" | "sma_crossover" | "candle_only" | "bullish_pullback_breakout" | "bearish_pullback_breakout" | "ai_reference_breakout";
 
 export interface ReferenceBreakout {
   reference_volume_min: number; volume_lookback: number; momentum_body_min: number;
@@ -38,6 +38,7 @@ export interface Entry {
 }
 
 export interface Strategy {
+  direction?: "long" | "short";
   volume_basis?: "traded" | "quote";
   partial_exit?: { fraction: number; profit_pct: number; basis: "price" | "account" } | null;
   symbol: SymbolName;
@@ -60,6 +61,7 @@ export interface SavedStrategy {
   strategy: Strategy; execution: ExecutionSettings;
 }
 export interface PaperSignal {
+  direction?: "long" | "short"; action?: "entry" | "exit";
   id: string; side: "BUY" | "SELL"; time: number; detected_at: string;
   quantity: number; price: number; reason: string; stop: number | null; target: number | null;
 }
@@ -87,8 +89,10 @@ export interface Snapshot {
   pattern?: {
     rally_min_candles: number;
     pullback_candles: number;
-    first_red_time: number;
-    first_red_high: number;
+    first_green_time?: number;
+    first_green_low?: number;
+    first_red_time?: number;
+    first_red_high?: number;
     breakout_by: "close" | "high";
     breakout_value: number;
   } | null;
@@ -107,6 +111,7 @@ export interface Snapshot {
 }
 
 export interface Trade {
+  direction?: "long" | "short";
   final_exit_price?: number;
   partial_exit_skipped?: string | null;
   exits?: { time: number; price: number; shares: number; reason: string; fee: number; trigger: string; gap?: boolean }[];

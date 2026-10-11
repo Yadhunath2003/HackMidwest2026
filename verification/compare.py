@@ -121,8 +121,8 @@ def compare(run_id):
         raise ValueError('Run is not saved yet. Wait for it to complete.')
     run = json.loads(row[0])
     strategy = run['strategy']
-    if strategy['symbol']=='XAUUSD' or strategy.get('partial_exit') or strategy['entry']['type']!='ai_reference_breakout':
-        raise ValueError('This verifier currently supports stock reference-breakout strategies without partial exits.')
+    if strategy.get('direction', 'long') != 'long' or strategy['symbol'] in ('XAUUSD', 'BTCUSD') or strategy.get('partial_exit') or strategy['entry']['type']!='ai_reference_breakout':
+        raise ValueError('This verifier currently supports long stock reference-breakout strategies without partial exits.')
     candles = json.loads((ROOT / f"backend/data/candles/{strategy['symbol']}_{strategy['timeframe']}.json").read_text())['candles']
     start = round(datetime.fromisoformat(run['data']['start']).timestamp())
     end = round(datetime.fromisoformat(run['data']['end']).timestamp())

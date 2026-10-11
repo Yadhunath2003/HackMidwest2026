@@ -57,6 +57,7 @@ export const ENTRY_LABELS: Record<Entry["type"], string> = {
   sma_crossover: "SMA crossover",
   candle_only: "Candle conditions",
   bullish_pullback_breakout: "Rally, pullback, breakout",
+  bearish_pullback_breakout: "Bearish rally, pullback, breakdown",
   ai_reference_breakout: "AI reference breakout",
 };
 
@@ -78,12 +79,13 @@ export interface RuleSection {
 }
 
 /** The plain-rule text per entry type, as listed in Data display. */
-export function entryRule(entry: Entry): string {
+export function entryRule(entry: Entry, direction: Strategy["direction"] = "long"): string {
+  const short = direction === "short";
   switch (entry.type) {
     case "ema_crossover":
-      return `EMA ${entry.fast_period} crosses above EMA ${entry.slow_period}`;
+      return `EMA ${entry.fast_period} crosses ${short ? "below" : "above"} EMA ${entry.slow_period}`;
     case "sma_crossover":
-      return `SMA ${entry.fast_period} crosses above SMA ${entry.slow_period}`;
+      return `SMA ${entry.fast_period} crosses ${short ? "below" : "above"} SMA ${entry.slow_period}`;
     case "candle_only": {
       const c = entry.candle_conditions;
       const parts = [c?.direction === "bearish" ? "Bearish candle" : c?.direction === "bullish" ? "Bullish candle" : "Candle"];
@@ -93,6 +95,10 @@ export function entryRule(entry: Entry): string {
       if (c?.relative_volume_min != null) parts.push(`volume ≥ ${c.relative_volume_min}× previous ${c.relative_volume_lookback ?? 20}`);
       return parts.join(", ");
     }
+    case "bearish_pullback_breakout": {
+      const p = entry.pullback_breakout;
+      return p ? `${p.rally_min_candles}+ red candles, then ${p.pullback_min_candles}-${p.pullback_max_candles} green, then red ${p.breakout_by === "close" ? "close" : "low"} below first green low` : "Bearish pullback breakdown";
+    }
     case "bullish_pullback_breakout": {
       const p = entry.pullback_breakout;
       if (!p) return "Rally, pullback, breakout";
@@ -101,6 +107,7 @@ export function entryRule(entry: Entry): string {
     case "ai_reference_breakout": {
       const r = entry.reference_breakout;
       if (!r) return "AI reference breakout";
+      if (short) return `Green reference with ${r.reference_volume_min}x volume in AI bullish trend; red momentum ${r.breakout_by === "close" ? "close" : "low"} below marked low in AI bearish trend. Sell short at next open; stop at marked high, risk ${r.risk_account_pct}% and target ${r.target_account_pct}% net account.`;
       return `Red candle with ≥ ${r.reference_volume_min}× volume in an AI-detected bearish trend marks a high/low; buy when a green momentum candle ${r.breakout_by === "close" ? "closes" : "trades"} above the high in a bullish trend. Stop at the marked low; risk ≤ ${r.risk_account_pct}% of account; target +${r.target_account_pct}% net account.`;
     }
   }
@@ -112,7 +119,7 @@ export function ruleSections(strategy: Strategy, execution: ExecutionSettings): 
   const reference = entry.type === "ai_reference_breakout";
   const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-  const entryRows: [string, string][] = [["Rule", entryRule(entry)]];
+  const entryRows: [string, string][] = [["Rule", entryRule(entry, strategy.direction)]];
   if (entry.rsi_period != null) {
     const bounds = [entry.rsi_below != null ? `below ${entry.rsi_below}` : "", entry.rsi_above != null ? `above ${entry.rsi_above}` : ""].filter(Boolean).join(", ");
     entryRows.push(["Filter", `RSI ${entry.rsi_period} ${bounds}`.trim()]);
@@ -126,14 +133,14 @@ export function ruleSections(strategy: Strategy, execution: ExecutionSettings): 
 
   const exitRows: [string, string][] = [];
   if (reference) {
-    exitRows.push(["Stop", "The marked red candle's low"]);
+    exitRows.push(["Stop", strategy.direction === "short" ? "The marked green candle high" : "The marked red candle low"]);
   } else {
     exitRows.push(["Stop / target", `${strategy.stop_loss_pct}% · ${strategy.take_profit_pct}%`]);
     if (strategy.exit_on_reverse_crossover) exitRows.push(["Also exit", "On a reverse crossover"]);
   }
   if (strategy.partial_exit) {
     const p = strategy.partial_exit;
-    exitRows.push(["Partial exit", `Sell ${Math.round(p.fraction * 100)}% at +${p.profit_pct}% ${p.basis === "account" ? "net account gain" : "price rise"}; the rest keeps the stop and final target`]);
+    exitRows.push(["Partial exit", `Close ${Math.round(p.fraction * 100)}% at +${p.profit_pct}% ${p.basis === "account" ? "net account gain" : strategy.direction === "short" ? "price fall" : "price rise"}; the rest keeps the stop and final target`]);
   }
 
   return [
@@ -141,8 +148,9 @@ export function ruleSections(strategy: Strategy, execution: ExecutionSettings): 
       title: "Market",
       rows: [
         ["Symbol", `${symbolName(strategy.symbol)} · ${strategy.timeframe}`],
+        ["Direction", strategy.direction === "short" ? "Short (sell to open, buy to cover)" : "Long (buy to open, sell to close)"],
         ["Balance", money(strategy.initial_capital)],
-        ["Position", reference ? "Calculated from account risk and the marked low" : money(strategy.position_size_usd)],
+        ["Position", reference ? (strategy.direction === "short" ? "Account risk and marked high" : "Account risk and marked low") : money(strategy.position_size_usd)],
       ],
     },
     { title: "Entry", rows: entryRows },

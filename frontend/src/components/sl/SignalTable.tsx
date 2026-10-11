@@ -27,7 +27,7 @@ export function SignalTable({ signals, symbol, maxHeight }: { signals: PaperSign
           <tbody>
             {[...signals].reverse().map((s) => (
               <tr key={s.id}>
-                <td className={TD}><Badge tone={s.side === "BUY" ? "brand" : "negative"}>{s.side}</Badge></td>
+                <td className={TD}><Badge tone={s.side === "BUY" ? "brand" : "negative"}>{s.direction === "short" ? (s.action === "entry" ? "SELL SHORT" : "BUY TO COVER") : s.side}</Badge></td>
                 <td className={cn(TD, NUM, "leading-5")}>
                   <span className="block">{formatTime(s.time)}</span>
                   <span className="block text-muted-foreground">{s.detected_at.slice(0, 19).replace("T", " ")}</span>

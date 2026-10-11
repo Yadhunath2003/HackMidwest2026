@@ -57,7 +57,7 @@ class ReferenceBreakout(StrictModel):
 
 class Entry(StrictModel):
     # "candle_only" enters on the candle conditions alone, with no moving-average crossover.
-    type: Literal["ema_crossover", "sma_crossover", "candle_only", "bullish_pullback_breakout", "ai_reference_breakout"]
+    type: Literal["ema_crossover", "sma_crossover", "candle_only", "bullish_pullback_breakout", "bearish_pullback_breakout", "ai_reference_breakout"]
     fast_period: int | None = Field(default=None, ge=2, le=200)
     slow_period: int | None = Field(default=None, ge=3, le=400)
     rsi_period: int | None = Field(default=None, ge=2, le=100)
@@ -75,9 +75,9 @@ class Entry(StrictModel):
                 raise ValueError(f"{self.type} requires fast_period and slow_period")
             if self.fast_period >= self.slow_period:
                 raise ValueError("fast_period must be smaller than slow_period")
-        elif self.type == "bullish_pullback_breakout":
+        elif self.type in ("bullish_pullback_breakout", "bearish_pullback_breakout"):
             if self.pullback_breakout is None:
-                raise ValueError("bullish_pullback_breakout requires pullback_breakout settings")
+                raise ValueError(f"{self.type} requires pullback_breakout settings")
         elif self.type == "ai_reference_breakout":
             if self.reference_breakout is None:
                 raise ValueError("ai_reference_breakout requires reference_breakout settings")
@@ -85,8 +85,8 @@ class Entry(StrictModel):
                 raise ValueError("reference_breakout contains its own trend and momentum settings; omit ai_trend and candle_conditions")
         elif self.candle_conditions is None:
             raise ValueError("candle_only entry requires candle_conditions")
-        if self.type != "bullish_pullback_breakout" and self.pullback_breakout is not None:
-            raise ValueError("pullback_breakout settings require bullish_pullback_breakout entry type")
+        if self.type not in ("bullish_pullback_breakout", "bearish_pullback_breakout") and self.pullback_breakout is not None:
+            raise ValueError("pullback_breakout settings require a bullish or bearish pullback entry type")
         if self.type != "ai_reference_breakout" and self.reference_breakout is not None:
             raise ValueError("reference_breakout settings require ai_reference_breakout entry type")
         if (self.rsi_below is not None or self.rsi_above is not None) and self.rsi_period is None:
@@ -103,6 +103,7 @@ class PartialExit(StrictModel):
 
 
 class Strategy(StrictModel):
+    direction: Literal["long", "short"] = "long"
     volume_basis: Literal["traded", "quote"] = "traded"
     symbol: Symbol
     timeframe: Timeframe
@@ -116,6 +117,12 @@ class Strategy(StrictModel):
 
     @model_validator(mode="after")
     def _check(self):
+        if self.direction == 'short' and self.take_profit_pct >= 100:
+            raise ValueError('Short price targets must be less than 100%')
+        if self.entry.type == 'bullish_pullback_breakout' and self.direction != 'long':
+            raise ValueError('Use bearish_pullback_breakout for short pullback entries')
+        if self.entry.type == 'bearish_pullback_breakout' and self.direction != 'short':
+            raise ValueError('bearish_pullback_breakout requires direction short')
         if self.entry.reference_breakout is None and self.position_size_usd > self.initial_capital:
             raise ValueError("position_size_usd cannot exceed initial_capital")
         if self.symbol != "XAUUSD" and self.volume_basis != "traded":
@@ -159,7 +166,7 @@ def describe_assumptions(strategy: Strategy, execution: ExecutionSettings | None
     execution = execution or ExecutionSettings()
     entry = strategy.entry
     notes = [
-        "Long-only, one position at a time; signals that fire while a position is open are ignored.",
+        f"{strategy.direction.capitalize()} positions only, one position at a time; signals that fire while a position is open are ignored.",
         "Signals are evaluated on completed candles and filled at the next candle's open.",
         "If a candle touches both the stop loss and the take profit, the stop loss is assumed to fill first.",
         "If a candle opens beyond the stop or target, the exit fills at that open (gap), not at the level.",
@@ -171,19 +178,25 @@ def describe_assumptions(strategy: Strategy, execution: ExecutionSettings | None
            else "whole shares; entries that cannot afford one share are rejected and counted."),
         "Any position still open at the last candle is closed at that candle's close.",
     ]
+    if strategy.direction == 'short':
+        notes.append('Shorts are hypothetical backtest/paper positions with 100% entry-notional collateral reserved from equity. Sale proceeds are not available for new trades. No broker orders, borrow availability, borrow fees, funding, margin interest or liquidation model is included; losses can exceed collateral during gaps.')
     if strategy.symbol == "XAUUSD" and strategy.volume_basis == "quote":
         notes.append("Gold volume filters use provider quote activity (tick-volume proxy), not ounces or contracts traded. Counts are feed-specific and may differ from another broker's tick volume.")
     if strategy.partial_exit:
         partial = strategy.partial_exit
         notes.append(
-            f"Sell {partial.fraction * 100:g}% of the original quantity once at {partial.profit_pct:g}% "
+            f"Close {partial.fraction * 100:g}% of the original quantity once at {partial.profit_pct:g}% "
             + ("net account gain if the entire position were liquidated, including the split's modeled costs. "
-               if partial.basis == "account" else "price rise from the entry fill. ")
+               if partial.basis == "account" else f"price {'rise' if strategy.direction == 'long' else 'fall'} from the entry fill. ")
             + "Quantity rounds down to the instrument's unit; skip the partial exit if it would sell zero units, leave no remainder, "
             "or its price is not below the final target. The stop stays unchanged. Each sell pays commission. "
             "A gap above the partial trigger fills at the open before testing the remainder's stop; otherwise the stop fills first "
             "when both are touched. The final account target includes realized partial profits and all modeled costs."
         )
+        if strategy.direction == 'short':
+            notes[-1] = (f"Buy to cover {partial.fraction * 100:g}% once at {partial.profit_pct:g}% "
+                         + ('net account gain including modeled costs.' if partial.basis == 'account' else 'price fall from entry.')
+                         + ' The stop stays unchanged. Every cover pays commission. The stop takes priority when both levels are touched, except a partial target crossed at the open fills first. Too-small quantities or targets beyond the final target are skipped.')
     if entry.type in ("ema_crossover", "sma_crossover") and (entry.candle_conditions or entry.rsi_period):
         notes.append("All entry conditions must be true on the same candle as the crossover.")
     if entry.pullback_breakout:
@@ -194,6 +207,8 @@ def describe_assumptions(strategy: Strategy, execution: ExecutionSettings | None
             f"The first green candle after the pullback must have its {pattern.breakout_by} strictly above the first red candle's high. "
             "A flat candle breaks the sequence. Candle color defines this pattern; it does not establish a higher-high/higher-low trend."
         )
+        if strategy.direction == 'short':
+            notes[-1] = (f"At least {pattern.rally_min_candles} red candles, then {pattern.pullback_min_candles}-{pattern.pullback_max_candles} green candles. The first following red candle must break below the first green candle's low by {'close' if pattern.breakout_by == 'close' else 'low'}. Flat candles invalidate the pattern.")
     if entry.ai_trend:
         notes.append(
             f"AI assesses {entry.ai_trend.direction} trend at candidate entry candles using up to "
@@ -216,6 +231,8 @@ def describe_assumptions(strategy: Strategy, execution: ExecutionSettings | None
             "as net trade profit after modeled costs, not a price percentage. Gaps can exceed the planned risk. "
             "Fixed dollar size and percentage stop/target fields are not used for this entry type."
         )
+        if strategy.direction == 'short':
+            notes[-1] = (f"Mark a green candle with volume at least {ref.reference_volume_min:g}x the prior {ref.volume_lookback} average in an AI bullish trend. A later red momentum candle (body/range at least {ref.momentum_body_min:g}) breaks the marked low by {'close' if ref.breakout_by == 'close' else 'low'} in an AI bearish trend; sell short at next open. Stop at marked high. Risk at most {ref.risk_account_pct:g}% of equity including modeled costs; target a net {ref.target_account_pct:g}% account gain. New references replace old ones; touching the marked high invalidates the setup; one entry attempt per reference. AI context {ref.context_candles}, minimum confidence {ref.min_confidence:g}.")
     if entry.candle_conditions and entry.candle_conditions.relative_volume_min is not None:
         notes.append(
             f"Relative volume compares a candle with the mean of the previous "
