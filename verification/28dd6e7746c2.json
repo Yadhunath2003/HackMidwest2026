@@ -1,0 +1,182 @@
+{
+  "run_id": "28dd6e7746c2",
+  "symbol": "TSLA",
+  "timeframe": "1h",
+  "engine": "Backtrader 1.9.78.123",
+  "app_trades": 18,
+  "backtrader_trades": 18,
+  "app_net_profit": 516.82,
+  "backtrader_net_profit": 516.82,
+  "missing_ai_judgments": [],
+  "differences": [],
+  "matched": true,
+  "backtrader_trade_details": [
+    {
+      "entry_time": 1738096200,
+      "entry_price": 400.38006,
+      "shares": 7,
+      "entry_fee": 1.0,
+      "exit_time": 1738171800,
+      "exit_price": 386.4227,
+      "pnl": -99.7
+    },
+    {
+      "entry_time": 1738337400,
+      "entry_price": 414.7529339999999,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1738593000,
+      "exit_price": 384.333118,
+      "pnl": -93.26
+    },
+    {
+      "entry_time": 1742574600,
+      "entry_price": 244.96898399999998,
+      "shares": 6,
+      "entry_fee": 1.0,
+      "exit_time": 1742844600,
+      "exit_price": 277.99244744,
+      "pnl": 196.14
+    },
+    {
+      "entry_time": 1743438600,
+      "entry_price": 254.890968,
+      "shares": 8,
+      "entry_fee": 1.0,
+      "exit_time": 1743607800,
+      "exit_price": 280.1489175316,
+      "pnl": 200.06
+    },
+    {
+      "entry_time": 1746109800,
+      "entry_price": 286.327254,
+      "shares": 6,
+      "entry_fee": 1.0,
+      "exit_time": 1747056600,
+      "exit_price": 321.870613,
+      "pnl": 211.26
+    },
+    {
+      "entry_time": 1748021400,
+      "entry_price": 343.09860599999996,
+      "shares": 10,
+      "entry_fee": 1.0,
+      "exit_time": 1748439000,
+      "exit_price": 364.767032,
+      "pnl": 214.68
+    },
+    {
+      "entry_time": 1752172200,
+      "entry_price": 306.58590492,
+      "shares": 5,
+      "entry_fee": 1.0,
+      "exit_time": 1756233000,
+      "exit_price": 349.5026562115712,
+      "pnl": 212.58
+    },
+    {
+      "entry_time": 1757079000,
+      "entry_price": 350.32835166,
+      "shares": 5,
+      "entry_fee": 1.0,
+      "exit_time": 1757687400,
+      "exit_price": 394.09543797740264,
+      "pnl": 216.84
+    },
+    {
+      "entry_time": 1758911400,
+      "entry_price": 439.87795800000004,
+      "shares": 5,
+      "entry_fee": 1.0,
+      "exit_time": 1759509000,
+      "exit_price": 420.9357959999999,
+      "pnl": -96.71
+    },
+    {
+      "entry_time": 1760459400,
+      "entry_price": 430.7201268,
+      "shares": 8,
+      "entry_fee": 1.0,
+      "exit_time": 1761226200,
+      "exit_price": 417.776428,
+      "pnl": -105.55
+    },
+    {
+      "entry_time": 1762367400,
+      "entry_price": 458.0650947,
+      "shares": 6,
+      "entry_fee": 1.0,
+      "exit_time": 1762443000,
+      "exit_price": 440.621858,
+      "pnl": -106.66
+    },
+    {
+      "entry_time": 1770654600,
+      "entry_price": 418.703724,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1772548200,
+      "exit_price": 387.45339382,
+      "pnl": -95.75
+    },
+    {
+      "entry_time": 1773084600,
+      "entry_price": 400.645113,
+      "shares": 5,
+      "entry_fee": 1.0,
+      "exit_time": 1773927000,
+      "exit_price": 381.32372,
+      "pnl": -98.61
+    },
+    {
+      "entry_time": 1776439800,
+      "entry_price": 408.21662699999996,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1776951000,
+      "exit_price": 375.40990300000004,
+      "pnl": -100.42
+    },
+    {
+      "entry_time": 1779809400,
+      "entry_price": 433.441671,
+      "shares": 4,
+      "entry_fee": 1.0,
+      "exit_time": 1780666200,
+      "exit_price": 412.81741999999997,
+      "pnl": -84.5
+    },
+    {
+      "entry_time": 1785767400,
+      "entry_price": 318.793746,
+      "shares": 6,
+      "entry_fee": 1.0,
+      "exit_time": 1787319000,
+      "exit_price": 353.6951195293256,
+      "pnl": 207.41
+    },
+    {
+      "entry_time": 1788445800,
+      "entry_price": 378.78574199999997,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1790775000,
+      "exit_price": 349.85001600000004,
+      "pnl": -88.81
+    },
+    {
+      "entry_time": 1790951400,
+      "entry_price": 372.694524,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1791574200,
+      "exit_price": 382.63345799999996,
+      "pnl": 27.82
+    }
+  ],
+  "limitations": [
+    "Reuses saved AI decisions; validates execution, not AI trend accuracy.",
+    "Uses current cached candles with matching dates/count; original candle values were not saved with the run.",
+    "Custom broker models app adverse limit slippage and stop-first order priority."
+  ]
+}

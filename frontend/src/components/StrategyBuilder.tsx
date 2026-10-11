@@ -1,15 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
-import type { CandleConditions, Entry, ExecutionSettings, Strategy } from "@/lib/types";
-
-export const MOMENTUM_PRESET: CandleConditions = {
-  direction: "bullish",
-  body_to_range_min: 0.7,
-  upper_wick_to_range_max: 0.15,
-  relative_volume_min: 2,
-  relative_volume_lookback: 20,
-};
+import AdvancedStrategyForm from "./AdvancedStrategyForm";
+import { money } from "@/lib/api";
+import type { ExecutionSettings, Strategy } from "@/lib/types";
 
 interface Props {
   strategy: Strategy;
@@ -21,253 +15,128 @@ interface Props {
   onExecutionChange: (execution: ExecutionSettings) => void;
 }
 
-function NumberField(props: {
-  label: string;
-  value: number | undefined;
-  onChange: (value: number) => void;
-  step?: number;
-  min?: number;
-}) {
-  return (
-    <label>
-      {props.label}
-      <input
-        type="number"
-        value={props.value ?? ""}
-        step={props.step ?? 1}
-        min={props.min ?? 0}
-        onChange={(e) => e.target.value !== "" && props.onChange(Number(e.target.value))}
-      />
-    </label>
-  );
+const TIMEFRAMES = { "5m": "5 minutes", "30m": "30 minutes", "1h": "1 hour", "4h": "4 hours", "1d": "1 day" };
+const ENTRY_TYPES = { ema_crossover: "EMA crossover", sma_crossover: "SMA crossover", candle_only: "Candle conditions only", bullish_pullback_breakout: "Bullish rally / pullback / breakout", ai_reference_breakout: "AI high-volume reference breakout" };
+const ratio = (value: number | undefined) => value == null ? "Not selected" : `${Number((value * 100).toFixed(2))}%`;
+
+function Values({ rows }: { rows: [string, string | number | undefined][] }) {
+  return <div className="grid">{rows.map(([label, value]) => (
+    <div className="metric" key={label}>
+      <div className="muted">{label}</div>
+      <div>{value ?? "Not selected"}</div>
+    </div>
+  ))}</div>;
 }
 
-function Slider(props: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label>
-      {props.label}
-      <input
-        type="range"
-        value={props.value}
-        min={props.min}
-        max={props.max}
-        step={props.step}
-        onChange={(e) => props.onChange(Number(e.target.value))}
-      />
-    </label>
-  );
-}
-
-// Simple Mode and Advanced Mode edit the same strategy object; the parent keeps them in sync.
+// Simple Mode displays the strategy; Advanced Mode keeps the form and JSON in sync.
 export default function StrategyBuilder(props: Props) {
   const [mode, setMode] = useState<"simple" | "advanced">("simple");
   const { strategy, execution } = props;
   const entry = strategy.entry;
   const candle = entry.candle_conditions;
-  const isCrossover = entry.type !== "candle_only";
-
-  const set = (patch: Partial<Strategy>) => props.onStrategyChange({ ...strategy, ...patch });
-  const setEntry = (patch: Partial<Entry>) => set({ entry: { ...entry, ...patch } });
-  const setCandle = (patch: Partial<CandleConditions>) =>
-    setEntry({ candle_conditions: { ...MOMENTUM_PRESET, ...candle, ...patch } });
-
-  function setEntryType(type: Entry["type"]) {
-    if (type === "candle_only") {
-      set({
-        exit_on_reverse_crossover: false,
-        entry: { type, candle_conditions: candle ?? MOMENTUM_PRESET, rsi_period: entry.rsi_period, rsi_below: entry.rsi_below },
-      });
-    } else {
-      setEntry({ type, fast_period: entry.fast_period ?? 9, slow_period: entry.slow_period ?? 21 });
-    }
-  }
 
   return (
     <>
       <div className="row tabs" style={{ gap: 4 }}>
-        <button className={mode === "simple" ? "active" : ""} onClick={() => setMode("simple")}>
-          Simple Mode
-        </button>
-        <button className={mode === "advanced" ? "active" : ""} onClick={() => setMode("advanced")}>
-          Advanced Mode (JSON)
-        </button>
+        <button className={mode === "simple" ? "active" : ""} onClick={() => setMode("simple")}>Simple Mode</button>
+        <button className={mode === "advanced" ? "active" : ""} onClick={() => setMode("advanced")}>Advanced Mode</button>
       </div>
-
       {mode === "advanced" ? (
         <>
-          <textarea
-            className="code"
-            rows={22}
-            spellCheck={false}
-            value={props.jsonText}
-            onChange={(e) => props.onJsonChange(e.target.value)}
-          />
+          <p className="muted">Edit the controls or JSON below. Both update the same strategy.</p>
+          {props.jsonError && <div className="notice warn">Fix the JSON syntax before editing the controls.</div>}
+          <AdvancedStrategyForm strategy={strategy} disabled={props.jsonError != null} onChange={props.onStrategyChange} />
+          <h3>Strategy JSON</h3>
+          <textarea className="code" rows={22} spellCheck={false} value={props.jsonText}
+            onChange={(e) => props.onJsonChange(e.target.value)} />
           {props.jsonError && <div className="notice error">JSON syntax: {props.jsonError}</div>}
-          <p className="muted">
-            Structured rules only. The server validates this against a strict schema; no code is executed.
-          </p>
+          <p className="muted">Edit the selected strategy here. Changes are validated before running.</p>
         </>
       ) : (
         <>
+          <p className="muted">Selected strategy. To change it, update your description and generate again, or use Advanced Mode.</p>
+          {props.jsonError && <div className="notice error">The JSON contains an error. Showing the last readable strategy: {props.jsonError}</div>}
           <h3>Market</h3>
-          <div className="grid">
-            <label>
-              Symbol
-              <select value={strategy.symbol} onChange={(e) => set({ symbol: e.target.value as Strategy["symbol"] })}>
-                <option>AAPL</option>
-                <option>SPY</option>
-                <option>TSLA</option>
-              </select>
-            </label>
-            <label>
-              Timeframe
-              <select
-                value={strategy.timeframe}
-                onChange={(e) => set({ timeframe: e.target.value as Strategy["timeframe"] })}
-              >
-                <option value="5m">5-minute (last ~60 days)</option>
-                <option value="1d">Daily (last 2 years)</option>
-              </select>
-            </label>
-            <NumberField
-              label="Starting balance ($)"
-              value={strategy.initial_capital}
-              step={500}
-              onChange={(v) => set({ initial_capital: v })}
-            />
-            <NumberField
-              label="Position size ($)"
-              value={strategy.position_size_usd}
-              step={100}
-              onChange={(v) => set({ position_size_usd: v })}
-            />
-          </div>
-
+          <Values rows={[
+            ["Symbol", strategy.symbol === "XAUUSD" ? "XAUUSD (spot gold / USD)" : strategy.symbol], ["Timeframe", TIMEFRAMES[strategy.timeframe] ?? strategy.timeframe],
+            ["Starting balance", money(strategy.initial_capital)], ["Position size", entry.reference_breakout ? "Calculated from account risk and reference low" : money(strategy.position_size_usd)],
+          ]} />
           <h3>Entry</h3>
-          <div className="grid">
-            <label>
-              Entry rule
-              <select value={entry.type} onChange={(e) => setEntryType(e.target.value as Entry["type"])}>
-                <option value="ema_crossover">EMA crossover</option>
-                <option value="sma_crossover">SMA crossover</option>
-                <option value="candle_only">Candle conditions only</option>
-              </select>
-            </label>
-            {isCrossover && (
-              <>
-                <NumberField label="Fast period" value={entry.fast_period} min={2} onChange={(v) => setEntry({ fast_period: v })} />
-                <NumberField label="Slow period" value={entry.slow_period} min={3} onChange={(v) => setEntry({ slow_period: v })} />
-              </>
-            )}
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={entry.rsi_below != null}
-                onChange={(e) =>
-                  setEntry(
-                    e.target.checked
-                      ? { rsi_period: 14, rsi_below: 70 }
-                      : { rsi_period: undefined, rsi_below: undefined, rsi_above: undefined },
-                  )
-                }
-              />
-              RSI filter
-            </label>
-            {entry.rsi_below != null && (
-              <>
-                <NumberField label="RSI period" value={entry.rsi_period} min={2} onChange={(v) => setEntry({ rsi_period: v })} />
-                <NumberField label="Only enter when RSI is below" value={entry.rsi_below} onChange={(v) => setEntry({ rsi_below: v })} />
-              </>
-            )}
-          </div>
-
-          <div className="grid" style={{ marginTop: 12 }}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={candle != null}
-                disabled={!isCrossover}
-                onChange={(e) => setEntry({ candle_conditions: e.target.checked ? MOMENTUM_PRESET : undefined })}
-              />
-              Bullish momentum candle
-            </label>
-            {candle && (
-              <>
-                <Slider
-                  label={`Body at least ${Math.round((candle.body_to_range_min ?? 0) * 100)}% of range`}
-                  value={candle.body_to_range_min ?? 0}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => setCandle({ body_to_range_min: v })}
-                />
-                <Slider
-                  label={`Upper wick at most ${Math.round((candle.upper_wick_to_range_max ?? 1) * 100)}% of range`}
-                  value={candle.upper_wick_to_range_max ?? 1}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => setCandle({ upper_wick_to_range_max: v })}
-                />
-                <Slider
-                  label={`Relative volume at least ${(candle.relative_volume_min ?? 1).toFixed(1)}x`}
-                  value={candle.relative_volume_min ?? 1}
-                  min={0.5}
-                  max={6}
-                  step={0.1}
-                  onChange={(v) => setCandle({ relative_volume_min: v })}
-                />
-                <NumberField
-                  label="Volume baseline (previous candles)"
-                  value={candle.relative_volume_lookback}
-                  min={2}
-                  onChange={(v) => setCandle({ relative_volume_lookback: v })}
-                />
-              </>
-            )}
-          </div>
-
+          <Values rows={[
+            ["Entry rule", ENTRY_TYPES[entry.type] ?? entry.type],
+            ...(entry.type === "ema_crossover" || entry.type === "sma_crossover" ? [["Fast period", entry.fast_period], ["Slow period", entry.slow_period]] as [string, number | undefined][] : []),
+            ["RSI period", entry.rsi_period], ["RSI below", entry.rsi_below], ["RSI above", entry.rsi_above],
+            ["Candle conditions", candle ? "Selected" : "Not selected"],
+          ]} />
+          {entry.pullback_breakout && <>
+            <h3>Rally and pullback</h3>
+            <Values rows={[
+              ["Minimum consecutive green candles", entry.pullback_breakout.rally_min_candles],
+              ["Minimum consecutive red candles", entry.pullback_breakout.pullback_min_candles],
+              ["Maximum consecutive red candles", entry.pullback_breakout.pullback_max_candles],
+              ["Breakout trigger", `First green candle's ${entry.pullback_breakout.breakout_by} above the first red candle's high`],
+            ]} />
+          </>}
+          {entry.ai_trend && <>
+            <h3>AI trend filter</h3>
+            <Values rows={[
+              ["Required direction", entry.ai_trend.direction],
+              ["Past candles available to AI", entry.ai_trend.context_candles],
+              ["Minimum model confidence", `${Math.round(entry.ai_trend.min_confidence * 100)}%`],
+              ["Trend duration", "Inferred by AI within the available history"],
+            ]} />
+          </>}
+          {entry.reference_breakout && <>
+            <h3>Reference breakout</h3>
+            <Values rows={[
+              ["Reference", `Red candle in AI bearish trend; volume ≥ ${entry.reference_breakout.reference_volume_min}× previous ${entry.reference_breakout.volume_lookback} candles`],
+              ["Breakout", `Green candle in AI bullish trend; ${entry.reference_breakout.breakout_by} above marked high`],
+              ["Minimum momentum body / range", ratio(entry.reference_breakout.momentum_body_min)],
+              ["Planned account risk", `${entry.reference_breakout.risk_account_pct}% including modeled costs`],
+              ["Stop", "Marked red candle's low"],
+              ["Net account-profit target", `${entry.reference_breakout.target_account_pct}% of equity at entry`],
+            ]} />
+          </>}
+          {candle && <>
+            <h3>Candle conditions</h3>
+            <Values rows={[
+              ["Direction", candle.direction], ["Minimum body / range", ratio(candle.body_to_range_min)],
+              ["Maximum upper wick / range", ratio(candle.upper_wick_to_range_max)],
+              ["Maximum lower wick / range", ratio(candle.lower_wick_to_range_max)],
+              ["Minimum relative volume", candle.relative_volume_min == null ? "Not selected" : `${candle.relative_volume_min}x`],
+              ["Volume baseline (previous candles)", candle.relative_volume_min == null ? "Not used" : candle.relative_volume_lookback ?? 20],
+            ]} />
+          </>}
+          {!entry.reference_breakout && <>
           <h3>Exit</h3>
-          <div className="grid">
-            <NumberField label="Stop loss (%)" value={strategy.stop_loss_pct} step={0.25} onChange={(v) => set({ stop_loss_pct: v })} />
-            <NumberField label="Take profit (%)" value={strategy.take_profit_pct} step={0.25} onChange={(v) => set({ take_profit_pct: v })} />
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={strategy.exit_on_reverse_crossover ?? false}
-                disabled={!isCrossover}
-                onChange={(e) => set({ exit_on_reverse_crossover: e.target.checked })}
-              />
-              Also exit on reverse crossover
-            </label>
-          </div>
+          <Values rows={[
+            ["Stop loss", `${strategy.stop_loss_pct}%`], ["Take profit", `${strategy.take_profit_pct}%`],
+            ["Exit on reverse crossover", strategy.exit_on_reverse_crossover ? "Yes" : "No"],
+          ]} />
+          </>}
         </>
       )}
-
+      {mode === "simple" && strategy.partial_exit && <Values rows={[["Partial exit", `Sell ${strategy.partial_exit.fraction * 100}% at ${strategy.partial_exit.profit_pct}% ${strategy.partial_exit.basis === "account" ? "net account gain if fully liquidated" : "price rise"}; keep the remainder's stop and final target`]]} />}
       <h3>Trading costs</h3>
-      <div className="grid">
-        <NumberField
-          label="Commission per order ($)"
-          value={execution.commission_per_order_usd}
-          step={0.5}
-          onChange={(v) => props.onExecutionChange({ ...execution, commission_per_order_usd: v })}
-        />
-        <NumberField
-          label="Slippage (basis points)"
-          value={execution.slippage_bps}
-          onChange={(v) => props.onExecutionChange({ ...execution, slippage_bps: v })}
-        />
-      </div>
+      {mode === "simple" && strategy.symbol === "XAUUSD" && strategy.volume_basis === "quote" && <p className="muted">Gold volume means quote activity (tick-volume proxy), not traded ounces or contracts.</p>}
+      {strategy.symbol === "BTCUSD" && <p className="muted">BTC/USD uses Kraken spot prices and traded BTC volume, with fractional Bitcoin sizing and 24/7 candles. Initial history is about 720 completed candles per timeframe.</p>}
+      {mode === "simple" ? (
+        <Values rows={[
+          ["Commission per order", money(execution.commission_per_order_usd)],
+          ["Slippage", `${execution.slippage_bps} basis points`],
+        ]} />
+      ) : (
+        <div className="grid">
+          <label>Commission per order ($)
+            <input type="number" min={0} step={0.5} value={execution.commission_per_order_usd}
+              onChange={(e) => e.target.value !== "" && props.onExecutionChange({ ...execution, commission_per_order_usd: Number(e.target.value) })} />
+          </label>
+          <label>Slippage (basis points)
+            <input type="number" min={0} value={execution.slippage_bps}
+              onChange={(e) => e.target.value !== "" && props.onExecutionChange({ ...execution, slippage_bps: Number(e.target.value) })} />
+          </label>
+        </div>
+      )}
     </>
   );
 }

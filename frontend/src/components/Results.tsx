@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { formatTime, money, percent } from "@/lib/api";
-import type { BacktestRun, Metrics, Trade } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, formatTime, money, percent } from "@/lib/api";
+import type { AIReport, BacktestRun, Metrics, Trade } from "@/lib/types";
+import AIReportView from "./AIReportView";
 import { EquityChart, PriceChart } from "./Charts";
 
 type SortKey = "id" | "entry_time" | "entry_price" | "exit_price" | "shares" | "pnl" | "pnl_pct" | "fees" | "bars_held" | "exit_reason";
@@ -52,6 +53,26 @@ interface Props {
 }
 
 export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
+  const [report, setReport] = useState<AIReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const reportRequest = useRef(0);
+  useEffect(() => {
+    reportRequest.current += 1;
+    setReport(null); setReportError(null); setReportLoading(false);
+  }, [run.id]);
+  async function analyze() {
+    const request = ++reportRequest.current;
+    setReportLoading(true); setReportError(null);
+    try {
+      const result = await api.backtestReport(run.id);
+      if (request === reportRequest.current) setReport(result);
+    } catch (e) {
+      if (request === reportRequest.current) setReportError(e instanceof Error ? e.message : "AI report failed.");
+    } finally {
+      if (request === reportRequest.current) setReportLoading(false);
+    }
+  }
   const [sort, setSort] = useState<{ key: SortKey; ascending: boolean }>({ key: "id", ascending: true });
 
   const trades = useMemo(() => {
@@ -70,8 +91,36 @@ export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
         Backtest results <span className="tag">simulation · run {run.id}</span>
       </h2>
       <MetricCards metrics={metrics} />
+      {run.strategy.partial_exit && <p className="muted">Each trade includes all of its sell fills. Exit price is the quantity-weighted average; the chart marks each partial sale and the final exit separately.</p>}
+      {selectedTrade?.exits && selectedTrade.exits.length > 1 && <div className="notice">
+        Trade #{selectedTrade.id} sell fills:
+        <ul>{selectedTrade.exits.map((exit, i) => <li key={i}>{formatTime(exit.time)} UTC · {exit.reason.replaceAll("_", " ")} · {exit.shares} units at {money(exit.price)} · fee {money(exit.fee)}</li>)}</ul>
+      </div>}
+      {selectedTrade?.partial_exit_skipped && <p className="muted">{selectedTrade.partial_exit_skipped}</p>}
+      {run.ai_usage && <p className="muted">
+        Backtest AI usage: {run.ai_usage.requests} requests · {run.ai_usage.cache_hits} cached checks · {run.ai_usage.prompt_tokens.toLocaleString()} input tokens · {run.ai_usage.completion_tokens.toLocaleString()} output tokens · {run.ai_usage.total_tokens.toLocaleString()} total reported tokens.
+        {run.ai_usage.unreported_requests > 0 && ` Usage was not reported for ${run.ai_usage.unreported_requests} requests; totals may be incomplete.`}
+      </p>}
+      <button className="primary" style={{ marginTop: 12 }} onClick={analyze} disabled={reportLoading}>
+        {reportLoading ? "Analyzing results…" : "Generate AI report"}
+      </button>
+      {reportError && <div className="notice error">{reportError}</div>}
+      {report && <AIReportView report={report} />}
+      {(run.strategy.entry.ai_trend || run.strategy.entry.reference_breakout) && <>
+        <h3>AI trend assessments</h3>
+        <p className="muted">Judgments at candidate entries, using completed/past candles only. Confidence is a model judgment, not a probability of profit.</p>
+        <div className="table-wrap"><table>
+          <thead><tr><th>Candidate (UTC)</th><th>Trend</th><th>Confidence</th><th>Inferred start (UTC)</th><th>Reasoning</th></tr></thead>
+          <tbody>{Object.entries(run.trend_assessments ?? {}).map(([time, assessment]) => <tr key={time}>
+            <td>{formatTime(Number(time))}</td><td>{assessment.direction}</td>
+            <td>{percent(assessment.confidence * 100, 0)}</td>
+            <td>{assessment.start_time == null ? "Unavailable" : formatTime(assessment.start_time)}</td>
+            <td style={{ whiteSpace: "normal", textAlign: "left", minWidth: 280 }}>{assessment.reason}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </>}
       {metrics.rejected_trades > 0 && (
-        <div className="notice warn">{metrics.rejected_trades} entry signal(s) were rejected (not enough cash or size below one share).</div>
+        <div className="notice warn">{metrics.rejected_trades} entry signal(s) were rejected (not enough cash or size below the minimum quantity).</div>
       )}
       {metrics.num_trades === 0 && (
         <div className="notice warn">No trades were triggered in this period. Try loosening the entry conditions.</div>
@@ -80,7 +129,7 @@ export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
       <h3>
         {data.symbol} {data.timeframe} candles · dots are matched signal candles, arrows are fills
       </h3>
-      <PriceChart run={run} selectedTrade={selectedTrade} />
+      <PriceChart run={run} selectedTrade={selectedTrade} onSelectTrade={onSelectTrade} />
 
       <h3>Equity curve</h3>
       <EquityChart run={run} />
@@ -96,7 +145,7 @@ export default function Results({ run, selectedTrade, onSelectTrade }: Props) {
                   className="sortable"
                   onClick={() => setSort({ key: column.key, ascending: sort.key === column.key ? !sort.ascending : true })}
                 >
-                  {column.label}
+                  {column.key === "shares" && run.strategy.symbol === "BTCUSD" ? "BTC" : column.key === "shares" && run.strategy.symbol === "XAUUSD" ? "Troy ounces" : column.label}
                   {sort.key === column.key ? (sort.ascending ? " ▲" : " ▼") : ""}
                 </th>
               ))}
