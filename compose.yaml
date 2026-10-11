@@ -18,7 +18,7 @@ services:
       args:
         BACKEND_URL: http://backend:8000  # "backend" resolves to the service above
     ports:
-      - "3000:3000"
+      - "80:3000"
     depends_on:
       - backend
     restart: unless-stopped
