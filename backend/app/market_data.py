@@ -24,6 +24,25 @@ class MarketDataError(Exception):
 
 
 def get_candles(symbol: str, timeframe: str, refresh: bool = False) -> tuple[list[dict], dict]:
+    candles, meta = _get_cached_candles(symbol, timeframe, refresh)
+    if symbol == 'BTCUSD':
+        # Never treat months of absent prices as consecutive signal/fill candles.
+        threshold = max(86400, CANDLE_SECONDS[timeframe] * 2)
+        segments = [[]]
+        for candle in candles:
+            if segments[-1] and candle['time'] - segments[-1][-1]['time'] > threshold:
+                segments.append([])
+            segments[-1].append(candle)
+        if len(segments) > 1:
+            selected = max(segments, key=len)
+            meta = {**meta, **describe_range(selected), 'limitations': list(meta['limitations']) + [
+                'Backtesting uses the largest history segment without gaps longer than one day (or two candles for longer intervals). Other cached segments are excluded to avoid trading across missing months.'],
+                'excluded_segment_candles': len(candles) - len(selected)}
+            candles = selected
+    return candles, meta
+
+
+def _get_cached_candles(symbol: str, timeframe: str, refresh: bool = False) -> tuple[list[dict], dict]:
     if symbol not in SUPPORTED_SYMBOLS:
         raise MarketDataError(f"Unsupported symbol '{symbol}'. Supported: {', '.join(SUPPORTED_SYMBOLS)}.")
     if timeframe not in SUPPORTED_TIMEFRAMES:
@@ -38,10 +57,10 @@ def get_candles(symbol: str, timeframe: str, refresh: bool = False) -> tuple[lis
     if symbol == "XAUUSD" and config.GOLD_PROVIDER == "massive":
         from .massive_gold import cache_period
         requested_period = cache_period()
-    if symbol != "XAUUSD" and timeframe in ("5m", "30m") and config.STOCK_INTRADAY_PROVIDER == "massive":
+    if symbol not in ("XAUUSD", "BTCUSD") and timeframe in ("5m", "30m") and config.STOCK_INTRADAY_PROVIDER == "massive":
         from .massive_data import cache_period
         requested_period = cache_period()
-    if symbol != "XAUUSD" and timeframe in ("5m", "30m") and config.STOCK_INTRADAY_PROVIDER == "twelvedata":
+    if symbol not in ("XAUUSD", "BTCUSD") and timeframe in ("5m", "30m") and config.STOCK_INTRADAY_PROVIDER == "twelvedata":
         from .stock_data import cache_period
         requested_period = cache_period()
     cached = json.loads(cache_file.read_text()) if cache_file.exists() else None
@@ -62,6 +81,14 @@ def get_candles(symbol: str, timeframe: str, refresh: bool = False) -> tuple[lis
     if symbol == "BTCUSD" and cached and cached['meta'].get('requested_period') == requested_period:
         candles = sorted({c['time']:c for c in cached['candles'] + candles}.values(),key=lambda c:c['time'])
         meta.update(describe_range(candles))
+        from .import_crypto_history import coverage
+        for key in ('archive_source', 'archive_member', 'history_window_days'):
+            if key in cached['meta']:
+                meta[key] = cached['meta'][key]
+        meta['coverage'] = coverage(candles, CANDLE_SECONDS[timeframe])
+        if meta['coverage']['gap_count']:
+            meta['limitations'].append(
+                f"History has {meta['coverage']['gap_count']} gap(s), totaling {meta['coverage']['missing_intervals']} absent intervals. Coverage is not continuous; missing candles are not invented.")
     config.CANDLE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({"meta": meta, "candles": candles}))
     return candles, meta

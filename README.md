@@ -245,3 +245,19 @@ Stopping freezes a session without closing its virtual position or issuing a SEL
 Keep the backend running to monitor markets, even if the browser is closed. Run
 **one backend worker**; multiple processes would duplicate monitoring. AI calls use
 the configured API and cached trend assessments; this does not impose a spending cap.
+# Free extended BTC/USD history
+
+From `backend`, run `python -m app.import_crypto_history`. This downloads only
+BTC/USD members from Kraken's public split ZIP archive using HTTP byte ranges,
+validates candles and ZIP CRCs, and imports two years ending at the archive's
+June 30, 2026 cutoff. Recent Kraken API candles are merged without deleting the
+archive. No credentials or AI requests are needed. The archive version is pinned
+in `app/import_crypto_history.py`; update it when Kraken publishes newer data.
+
+The five supported timeframes are imported; 30-minute candles require six complete
+5-minute bars. Cache files live in `backend/data/candles/BTCUSD_*.json` and survive
+app restarts. Metadata lists missing intervals; absent prices are never fabricated.
+Backtests use the largest segment without gaps longer than one day (or two candles
+for longer intervals), so hourly backtests may end June 30 rather than today.
+Restart the backend to load the new gap-handling code; this interrupts active jobs.
+
