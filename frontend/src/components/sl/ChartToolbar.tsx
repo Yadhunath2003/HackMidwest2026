@@ -34,7 +34,7 @@ export function ChartToolbar({ trades, symbol, selectedId, onSelectTrade, onFit,
               <DropdownMenuRadioGroup value={selected ? String(selected.id) : ""} onValueChange={(v) => { const t = trades.find((x) => x.id === Number(v)); if (t) onSelectTrade(t); }}>
                 {trades.map((t) => (
                   <DropdownMenuRadioItem key={t.id} value={String(t.id)} className="font-mono text-xs">
-                    #{t.id} &middot; Buy {t.entry_price.toFixed(2)} &rarr; {exitPrice(t).toFixed(2)}
+                    #{t.id} &middot; {t.direction === "short" ? "Sell short" : "Buy"} {t.entry_price.toFixed(2)} &rarr; {exitPrice(t).toFixed(2)}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
@@ -55,8 +55,8 @@ export function ChartToolbar({ trades, symbol, selectedId, onSelectTrade, onFit,
         <div className="rounded-xl border bg-card px-3.5 py-2.5 text-[13px]">
           <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <strong className="text-sm font-semibold">Trade #{selected.id}</strong>
-            <span><span className="text-brand">Entry</span> <span className="font-mono">{money(selected.entry_price)} &middot; {formatTime(selected.entry_time)}</span></span>
-            <span><span className={selected.pnl >= 0 ? "text-positive" : "text-negative"}>Exit</span> <span className="font-mono">{money(exitPrice(selected))} &middot; {formatTime(selected.exit_time)}</span> &middot; {exitLabel(selected.exit_reason)}</span>
+            <span><span className="text-brand">{selected.direction === "short" ? "Sell short" : "Buy entry"}</span> <span className="font-mono">{money(selected.entry_price)} &middot; {formatTime(selected.entry_time)}</span></span>
+            <span><span className={selected.pnl >= 0 ? "text-positive" : "text-negative"}>{selected.direction === "short" ? "Buy to cover" : "Sell exit"}</span> <span className="font-mono">{money(exitPrice(selected))} &middot; {formatTime(selected.exit_time)}</span> &middot; {exitLabel(selected.exit_reason)}</span>
           </p>
           <p className="mt-0.5">P&amp;L <span className={cn("font-mono", selected.pnl >= 0 ? "text-positive" : "text-negative")}>{signedMoney(selected.pnl)}</span> <span className="text-muted-foreground">&middot; times in UTC</span></p>
         </div>

@@ -8,7 +8,7 @@ import { NUM, TableWrap, TD, TH } from "./table";
 export function FillsTable({ fills, symbol, skipped }: { fills: NonNullable<Trade["exits"]>; symbol: string; skipped?: string | null }) {
   return (
     <div className="space-y-1.5">
-      <h4 className="text-sm font-semibold">Sell fills</h4>
+      <h4 className="text-sm font-semibold">Closing fills</h4>
       <TableWrap>
         <thead>
           <tr>
@@ -31,7 +31,7 @@ export function FillsTable({ fills, symbol, skipped }: { fills: NonNullable<Trad
           ))}
         </tbody>
       </TableWrap>
-      <p className="text-xs text-muted-foreground">Exit price is the quantity-weighted average of all sell fills.</p>
+      <p className="text-xs text-muted-foreground">Exit price is the quantity-weighted average of all closing fills.</p>
       {skipped ? <p className="text-xs text-muted-foreground">{skipped}</p> : null}
     </div>
   );

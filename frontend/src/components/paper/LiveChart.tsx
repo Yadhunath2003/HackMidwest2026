@@ -64,7 +64,7 @@ export function LiveChart({ session }: { session: PaperSession }) {
       id: s.id, time: s.time as UTCTimestamp,
       position: s.side === "BUY" ? "belowBar" as const : "aboveBar" as const,
       shape: s.side === "BUY" ? "arrowUp" as const : "arrowDown" as const,
-      color: s.side === "BUY" ? colors.buy : colors.loss, text: s.side, size: 2,
+      color: s.side === "BUY" ? colors.buy : colors.loss, text: s.direction === "short" ? (s.action === "entry" ? "SELL SHORT" : "BUY TO COVER") : s.side, size: 2,
     })));
     for (const line of lines.current) series.removePriceLine(line);
     lines.current = session.position ? [

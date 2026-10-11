@@ -16,6 +16,7 @@ const ratio = (value: number | null) => (value == null ? "unavailable" : `${(val
 /** Snapshot rows for one trade, grouped: Signal, Pattern / Reference, AI trend at entry, Execution, Costs. */
 function groupsFor(run: BacktestRun, trade: Trade): EvidenceGroup[] {
   const s = trade.entry_evidence;
+  const short=trade.direction === "short";
   const unit = quantityUnit(run.strategy.symbol).toLowerCase();
   const groups: EvidenceGroup[] = [];
 
@@ -34,12 +35,12 @@ function groupsFor(run: BacktestRun, trade: Trade): EvidenceGroup[] {
 
   const pattern: [string, string][] = [];
   if (s.pattern) {
-    pattern.push(["Rally / pullback", `${s.pattern.rally_min_candles}+ green, then ${s.pattern.pullback_candles} red`]);
-    pattern.push(["Breakout", `${s.pattern.breakout_by} ${s.pattern.breakout_value} above first red high ${s.pattern.first_red_high} (${formatTime(s.pattern.first_red_time)} UTC)`]);
+    pattern.push(["Rally / pullback", short ? `${s.pattern.rally_min_candles}+ red, then ${s.pattern.pullback_candles} green` : `${s.pattern.rally_min_candles}+ green, then ${s.pattern.pullback_candles} red`]);
+    pattern.push(["Breakout", short ? `${s.pattern.breakout_by} ${s.pattern.breakout_value} below first green low ${s.pattern.first_green_low}` : `${s.pattern.breakout_by} ${s.pattern.breakout_value} above first red high ${s.pattern.first_red_high} (${formatTime(s.pattern.first_red_time ?? 0)} UTC)`]);
   }
   if (s.reference_breakout) {
     const r = s.reference_breakout;
-    pattern.push(["Marked red candle (UTC)", formatTime(r.time)]);
+    pattern.push([short ? "Marked green candle (UTC)" : "Marked red candle (UTC)", formatTime(r.time)]);
     pattern.push(["Marked high / low", `${r.high} / ${r.low}`]);
     pattern.push(["Reference volume", `${r.relative_volume.toFixed(2)}×`]);
     pattern.push(["Planned stop risk / budget", `${money(trade.planned_stop_loss ?? 0)} / ${money(trade.risk_budget ?? 0)}`]);
@@ -64,9 +65,9 @@ function groupsFor(run: BacktestRun, trade: Trade): EvidenceGroup[] {
   groups.push({
     title: "Execution",
     rows: [
-      ["Entry (UTC)", `${formatTime(trade.entry_time)} at ${trade.entry_price} · ${trade.shares} ${unit} (${money(trade.position_value)})`],
+      [short ? "Sell short (UTC)" : "Buy entry (UTC)", `${formatTime(trade.entry_time)} at ${trade.entry_price} · ${trade.shares} ${unit} (${money(trade.position_value)})`],
       ["Stop / target", `${trade.stop_price} / ${trade.target_price}`],
-      ["Exit (UTC)", `${formatTime(trade.exit_time)} at ${trade.exit_price}`],
+      [short ? "Buy to cover (UTC)" : "Sell exit (UTC)", `${formatTime(trade.exit_time)} at ${trade.exit_price}`],
       ["Exit trigger", trade.exit_evidence.trigger],
       ["Realized P&L", `${signedMoney(trade.pnl)} (${signedPercent(trade.pnl_pct)})`],
     ],

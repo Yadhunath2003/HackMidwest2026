@@ -61,15 +61,16 @@ export function PriceChart({ run, selectedTrade, onSelectTrade, showVolume, onVo
 
     // Matched signal candles (dots), then the fills they led to (arrows with short text: B3, S3, P3).
     const markers: SeriesMarker<Time>[] = run.signals.map((s) => ({
-      time: s.time as UTCTimestamp, position: "belowBar", shape: "circle", size: 0.5,
+      time: s.time as UTCTimestamp, position: run.strategy.direction === "short" ? "aboveBar" : "belowBar", shape: "circle", size: 0.5,
       color: s.acted ? colors.buy : colors.idle,
     }));
     for (const trade of run.trades) {
-      markers.push({ id: `entry-${trade.id}`, time: trade.entry_time as UTCTimestamp, position: "belowBar", shape: "arrowUp", color: colors.buy, text: `B${trade.id}`, size: 2 });
-      markers.push({ id: `exit-${trade.id}`, time: trade.exit_time as UTCTimestamp, position: "aboveBar", shape: "arrowDown", color: trade.pnl >= 0 ? colors.win : colors.loss, text: `S${trade.id}`, size: 2 });
+      const short=trade.direction === "short";
+      markers.push({ id: `entry-${trade.id}`, time: trade.entry_time as UTCTimestamp, position: short ? "aboveBar" : "belowBar", shape: short ? "arrowDown" : "arrowUp", color: colors.buy, text: `${short ? "SELL SHORT" : "BUY"} #${trade.id}`, size: 2 });
+      markers.push({ id: `exit-${trade.id}`, time: trade.exit_time as UTCTimestamp, position: short ? "belowBar" : "aboveBar", shape: short ? "arrowUp" : "arrowDown", color: trade.pnl >= 0 ? colors.win : colors.loss, text: `${short ? "BUY TO COVER" : "SELL"} #${trade.id}`, size: 2 });
       for (const exit of trade.exits ?? []) {
         if (exit.reason !== "partial_take_profit") continue;
-        markers.push({ id: `partial-${trade.id}`, time: exit.time as UTCTimestamp, position: "aboveBar", shape: "arrowDown", color: colors.partial, text: `P${trade.id}`, size: 2 });
+        markers.push({ id: `partial-${trade.id}`, time: exit.time as UTCTimestamp, position: short ? "belowBar" : "aboveBar", shape: short ? "arrowUp" : "arrowDown", color: colors.partial, text: `P${trade.id}`, size: 2 });
       }
     }
     markers.sort((a, b) => (a.time as number) - (b.time as number));

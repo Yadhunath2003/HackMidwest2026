@@ -18,6 +18,7 @@ const ENTRY_OPTIONS = [
   { value: "sma_crossover", label: "SMA crossover" },
   { value: "candle_only", label: "Candle conditions only" },
   { value: "bullish_pullback_breakout", label: "Rally, pullback, breakout" },
+  { value: "bearish_pullback_breakout", label: "Bearish pullback breakdown" },
   { value: "ai_reference_breakout", label: "AI reference breakout" },
 ];
 
@@ -59,6 +60,7 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
 }) {
   const entry = strategy.entry;
   const candle = entry.candle_conditions;
+  const short = strategy.direction === "short";
   const isCrossover = entry.type === "ema_crossover" || entry.type === "sma_crossover";
   const isReference = entry.type === "ai_reference_breakout";
 
@@ -82,7 +84,7 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
       if (type === "candle_only") {
         next.candle_conditions = candle ?? PRESET;
         delete next.pullback_breakout;
-      } else if (type === "bullish_pullback_breakout") {
+      } else if (type === "bullish_pullback_breakout" || type === "bearish_pullback_breakout") {
         next.pullback_breakout = entry.pullback_breakout ?? { rally_min_candles: 3, pullback_min_candles: 1, pullback_max_candles: 3, breakout_by: "close" };
       } else {
         delete next.ai_trend;
@@ -96,6 +98,7 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
     }
     set({
       entry: next,
+      ...(type === "bearish_pullback_breakout" ? { direction: "short" as const } : type === "bullish_pullback_breakout" ? { direction: "long" as const } : {}),
       exit_on_reverse_crossover: type === "ema_crossover" || type === "sma_crossover" ? strategy.exit_on_reverse_crossover : false,
       ...(type !== "ai_reference_breakout" && strategy.partial_exit?.basis === "account" ? { partial_exit: { ...strategy.partial_exit, basis: "price" as const } } : {}),
     });
@@ -122,6 +125,13 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
         <div className="flex-1 overflow-y-auto px-4">
           <Accordion type="multiple" defaultValue={["market", "entry", "pullback", "reference", "trend", "candle", "exit", "partial", "costs"]}>
             <Section value="market" title="Market">
+              <Field as="select" label="Trade direction" value={strategy.direction ?? "long"} disabled={disabled}
+                options={[{value:"long",label:"Long (buy to open)"},{value:"short",label:"Short (sell to open)"}]}
+                onChange={(e) => {
+                  const direction=e.target.value as "long" | "short";
+                  set({direction,entry:{...entry,type:entry.pullback_breakout ? (direction === "short" ? "bearish_pullback_breakout" : "bullish_pullback_breakout") : entry.type}});
+                }} />
+              {short ? <p className="text-xs text-muted-foreground sm:col-span-2">Hypothetical shorts reserve entry-value collateral; borrow costs, funding and liquidation are not modeled.</p> : null}
               <Field as="select" label="Symbol" value={strategy.symbol} disabled={disabled}
                 options={Object.entries(SYMBOL_NAMES).map(([value, label]) => ({ value, label }))}
                 onChange={(e) => set({ symbol: e.target.value as Strategy["symbol"] })} />
@@ -152,11 +162,11 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
 
             {entry.pullback_breakout ? (
               <Section value="pullback" title="Rally and pullback">
-                <NumberField label="Minimum green candles" value={entry.pullback_breakout.rally_min_candles} min={2} max={100} disabled={disabled} onChange={(v) => v != null && setPullback({ rally_min_candles: v })} />
-                <NumberField label="Minimum red candles" value={entry.pullback_breakout.pullback_min_candles} min={1} max={50} disabled={disabled} onChange={(v) => v != null && setPullback({ pullback_min_candles: v })} />
-                <NumberField label="Maximum red candles" value={entry.pullback_breakout.pullback_max_candles} min={1} max={50} disabled={disabled} onChange={(v) => v != null && setPullback({ pullback_max_candles: v })} />
-                <Field as="select" label="Breakout above first red high by" value={entry.pullback_breakout.breakout_by} disabled={disabled}
-                  options={[{ value: "close", label: "Green candle close" }, { value: "high", label: "Green candle high" }]}
+                <NumberField label={short ? "Minimum red candles" : "Minimum green candles"} value={entry.pullback_breakout.rally_min_candles} min={2} max={100} disabled={disabled} onChange={(v) => v != null && setPullback({ rally_min_candles: v })} />
+                <NumberField label={short ? "Minimum green candles" : "Minimum red candles"} value={entry.pullback_breakout.pullback_min_candles} min={1} max={50} disabled={disabled} onChange={(v) => v != null && setPullback({ pullback_min_candles: v })} />
+                <NumberField label={short ? "Maximum green candles" : "Maximum red candles"} value={entry.pullback_breakout.pullback_max_candles} min={1} max={50} disabled={disabled} onChange={(v) => v != null && setPullback({ pullback_max_candles: v })} />
+                <Field as="select" label={short ? "Breakout below first green low by" : "Breakout above first red high by"} value={entry.pullback_breakout.breakout_by} disabled={disabled}
+                  options={[{ value: "close", label: short ? "Red candle close" : "Green candle close" }, { value: "high", label: short ? "Red candle low" : "Green candle high" }]}
                   onChange={(e) => setPullback({ breakout_by: e.target.value as "close" | "high" })} />
               </Section>
             ) : null}
@@ -164,13 +174,13 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
             {entry.reference_breakout ? (
               <Section value="reference" title="Reference and account risk" aiBadge>
                 <p className="text-xs text-muted-foreground sm:col-span-2">
-                  AI must see a bearish trend at the red reference candle and a bullish trend at the green breakout. The stop is the marked low and the target is a net account gain. A touch of the low invalidates the setup; a newer qualifying reference replaces an older one.
+                  {short ? "Green reference in AI bullish trend; red breakout below marked low in AI bearish trend. Stop at marked high; a high touch invalidates." : "Red reference in AI bearish trend; green breakout above marked high in AI bullish trend. Stop at marked low; a low touch invalidates."} Target is net account gain; new qualifying references replace old ones.
                 </p>
                 {referenceFields.map(([key, label, min, max, step]) => (
                   <NumberField key={key} label={label} value={entry.reference_breakout![key]} min={min} max={max} step={step} disabled={disabled} onChange={(v) => v != null && setReference({ [key]: v })} />
                 ))}
                 <Field as="select" label="Breakout trigger" value={entry.reference_breakout.breakout_by} disabled={disabled}
-                  options={[{ value: "close", label: "Close above marked high" }, { value: "high", label: "High above marked high" }]}
+                  options={[{ value: "close", label: short ? "Close below marked low" : "Close above marked high" }, { value: "high", label: short ? "Low below marked low" : "High above marked high" }]}
                   onChange={(e) => setReference({ breakout_by: e.target.value as "close" | "high" })} />
               </Section>
             ) : null}
@@ -221,14 +231,14 @@ export function StrategyEditor({ open, onOpenChange, strategy, onChange, executi
             ) : null}
 
             <Section value="partial" title="Partial exit">
-              <Toggle label="Sell part of the position at a profit trigger" checked={strategy.partial_exit != null} disabled={disabled}
+              <Toggle label="Close part of the position at a profit trigger" checked={strategy.partial_exit != null} disabled={disabled}
                 onChange={(on) => set({ partial_exit: on ? { fraction: 0.5, profit_pct: 1, basis: isReference ? "account" : "price" } : undefined })} />
               {strategy.partial_exit ? (
                 <>
-                  <NumberField label="Position to sell (%)" value={Math.round(strategy.partial_exit.fraction * 100)} min={1} max={99} disabled={disabled} onChange={(v) => v != null && set({ partial_exit: { ...strategy.partial_exit!, fraction: v / 100 } })} />
+                  <NumberField label="Position to close (%)" value={Math.round(strategy.partial_exit.fraction * 100)} min={1} max={99} disabled={disabled} onChange={(v) => v != null && set({ partial_exit: { ...strategy.partial_exit!, fraction: v / 100 } })} />
                   <NumberField label="Profit trigger (%)" value={strategy.partial_exit.profit_pct} min={0.01} max={200} step={0.25} disabled={disabled} onChange={(v) => v != null && set({ partial_exit: { ...strategy.partial_exit!, profit_pct: v } })} />
                   <Field as="select" label="Trigger basis" value={strategy.partial_exit.basis} disabled={disabled}
-                    options={[{ value: "price", label: "Price rise from entry" }, ...(isReference ? [{ value: "account", label: "Net account gain" }] : [])]}
+                    options={[{ value: "price", label: short ? "Price fall from entry" : "Price rise from entry" }, ...(isReference ? [{ value: "account", label: "Net account gain" }] : [])]}
                     onChange={(e) => set({ partial_exit: { ...strategy.partial_exit!, basis: e.target.value as "price" | "account" } })} />
                 </>
               ) : null}
