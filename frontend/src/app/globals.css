@@ -1,266 +1,160 @@
-:root {
-  --bg: #0e1117;
-  --panel: #161b24;
-  --panel-2: #1d2430;
-  --border: #2a3342;
-  --text: #e6e9ef;
-  --muted: #8b95a7;
-  --accent: #4f8cff;
-  --good: #26a69a;
-  --bad: #ef5350;
-  --warn: #e0a83a;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* StrategyLab AI design tokens (v4), generated from tokens.json.
+   Dark is the default theme. Add class "light" (or data-theme="light") on <html> for light.
+   Paste into src/app/globals.css after `@import "tailwindcss";`, replacing everything else in that file. */
+
+:root, .dark, [data-theme="dark"] {
+  --radius: 0.625rem;
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --card: #171717;
+  --card-foreground: var(--foreground);
+  --popover: #171717;
+  --popover-foreground: var(--foreground);
+  --primary: #f5f5f5;
+  --primary-foreground: #0a0a0a;
+  --secondary: #2a2a2a;
+  --secondary-foreground: var(--foreground);
+  --reply: #1c1c1c;
+  --muted: #1f1f1f;
+  --muted-foreground: #a3a3a3;
+  --accent: #1f1f1f;
+  --accent-foreground: var(--foreground);
+  --border: #262626;
+  --input: #737373;
+  --ring: #a3a3a3;
+  --brand: #6ca6ff;
+  --brand-soft: #16263d;
+  --positive: #4ade80;
+  --positive-soft: #0f2e1b;
+  --negative: #f87171;
+  --negative-soft: #3a1515;
+  --destructive: var(--negative);
+  --warning: #fbbf24;
+  --warning-soft: #33270a;
+  --sidebar: #111111;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-border: var(--border);
+  --chart-bg: var(--background);
+  --chart-text: var(--muted-foreground);
+  --chart-grid: #1c1c1c;
+  --chart-up: var(--positive);
+  --chart-down: var(--negative);
+  --chart-buy: var(--brand);
+  --chart-partial: var(--warning);
+  --chart-signal-idle: var(--muted-foreground);
+  --chart-volume-up: #4ade8059;
+  --chart-volume-down: #f8717159;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
-* {
-  box-sizing: border-box;
+.light, [data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #f5f5f4;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+  --secondary: #e9e9e7;
+  --secondary-foreground: var(--foreground);
+  --reply: #f3f3f2;
+  --muted: #efefed;
+  --muted-foreground: #5c5c5c;
+  --accent: #efefed;
+  --accent-foreground: var(--foreground);
+  --border: #e5e5e5;
+  --input: #8a8a8a;
+  --ring: #525252;
+  --brand: #2563c9;
+  --brand-soft: #e7effc;
+  --positive: #136c36;
+  --positive-soft: #e6f4ea;
+  --negative: #c62f3a;
+  --negative-soft: #fbe9ea;
+  --destructive: var(--negative);
+  --warning: #9a5b00;
+  --warning-soft: #fdf1dc;
+  --sidebar: #f9f9f8;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-border: var(--border);
+  --chart-bg: var(--background);
+  --chart-text: var(--muted-foreground);
+  --chart-grid: #eeeeec;
+  --chart-up: var(--positive);
+  --chart-down: var(--negative);
+  --chart-buy: var(--brand);
+  --chart-partial: var(--warning);
+  --chart-signal-idle: var(--muted-foreground);
+  --chart-volume-up: #136c3647;
+  --chart-volume-down: #c62f3a47;
+  --shadow-sm: 0 1px 2px rgba(12, 20, 32, 0.06);
+  --shadow-lg: 0 12px 32px rgba(12, 20, 32, 0.12);
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-reply: var(--reply);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-chart-bg: var(--chart-bg);
+  --color-chart-text: var(--chart-text);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-up: var(--chart-up);
+  --color-chart-down: var(--chart-down);
+  --color-chart-buy: var(--chart-buy);
+  --color-chart-partial: var(--chart-partial);
+  --color-chart-signal-idle: var(--chart-signal-idle);
+  --color-chart-volume-up: var(--chart-volume-up);
+  --color-chart-volume-down: var(--chart-volume-down);
+
+  /* next/font variables set in layout.tsx */
+  --font-sans: var(--font-geist), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 }
 
-main {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
-}
-
-header h1 {
-  margin: 0;
-  font-size: 22px;
-}
-
-header p,
-.muted {
-  color: var(--muted);
-}
-
-h2 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-
-h3 {
-  margin: 16px 0 6px;
-  font-size: 13px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-section.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 16px;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-label.check {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-size: 14px;
-}
-
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 7px 9px;
-}
-
-input[type="checkbox"],
-input[type="range"] {
-  padding: 0;
-  accent-color: var(--accent);
-}
-
-textarea {
-  width: 100%;
-  resize: vertical;
-}
-
-textarea.code {
-  font: 13px/1.45 ui-monospace, Consolas, monospace;
-}
-
-button {
-  cursor: pointer;
-}
-
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.tabs button {
-  border-radius: 6px 6px 0 0;
-  border-bottom: none;
-  color: var(--muted);
-}
-
-.tabs button.active {
-  color: var(--text);
-  background: var(--panel-2);
-  border-color: var(--accent);
-}
-
-.notice {
-  border-left: 3px solid var(--border);
-  background: var(--panel-2);
-  padding: 8px 12px;
-  margin-top: 10px;
-  border-radius: 0 6px 6px 0;
-}
-
-.notice.error {
-  border-color: var(--bad);
-}
-
-.notice.warn {
-  border-color: var(--warn);
-}
-
-.notice ul,
-ul.plain {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.metric {
-  background: var(--panel-2);
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-
-.metric .value {
-  font-size: 19px;
-  font-weight: 600;
-}
-
-.good {
-  color: var(--good);
-}
-
-.bad {
-  color: var(--bad);
-}
-
-.chart {
-  width: 100%;
-  height: 420px;
-}
-
-.chart.small {
-  height: 200px;
-}
-
-.table-wrap {
-  max-height: 340px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-
-th,
-td {
-  padding: 6px 10px;
-  text-align: right;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border);
-}
-
-th:first-child,
-td:first-child {
-  text-align: left;
-}
-
-th {
-  position: sticky;
-  top: 0;
-  background: var(--panel-2);
-  color: var(--muted);
-  font-weight: 500;
-}
-
-th.sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-tr.clickable {
-  cursor: pointer;
-}
-
-tr.clickable:hover,
-tr.selected {
-  background: var(--panel-2);
-}
-
-tr.selected td:first-child {
-  box-shadow: inset 3px 0 var(--accent);
-}
-
-.tag {
-  font-size: 11px;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1px 8px;
-}
-
-footer {
-  margin-top: 28px;
-  font-size: 12px;
-  color: var(--muted);
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
