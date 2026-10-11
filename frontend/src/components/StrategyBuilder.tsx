@@ -16,7 +16,7 @@ interface Props {
 }
 
 const TIMEFRAMES = { "5m": "5 minutes", "30m": "30 minutes", "1h": "1 hour", "4h": "4 hours", "1d": "1 day" };
-const ENTRY_TYPES = { ema_crossover: "EMA crossover", sma_crossover: "SMA crossover", candle_only: "Candle conditions only", bullish_pullback_breakout: "Bullish rally / pullback / breakout", ai_reference_breakout: "AI high-volume reference breakout" };
+const ENTRY_TYPES = { ema_crossover: "EMA crossover", sma_crossover: "SMA crossover", candle_only: "Candle conditions only", bullish_pullback_breakout: "Bullish rally / pullback / breakout", bearish_pullback_breakout: "Bearish rally / pullback / breakdown", ai_reference_breakout: "AI high-volume reference breakout" };
 const ratio = (value: number | undefined) => value == null ? "Not selected" : `${Number((value * 100).toFixed(2))}%`;
 
 function Values({ rows }: { rows: [string, string | number | undefined][] }) {
@@ -34,6 +34,7 @@ export default function StrategyBuilder(props: Props) {
   const { strategy, execution } = props;
   const entry = strategy.entry;
   const candle = entry.candle_conditions;
+  const short = strategy.direction === "short";
 
   return (
     <>
@@ -59,7 +60,8 @@ export default function StrategyBuilder(props: Props) {
           <h3>Market</h3>
           <Values rows={[
             ["Symbol", strategy.symbol === "XAUUSD" ? "XAUUSD (spot gold / USD)" : strategy.symbol], ["Timeframe", TIMEFRAMES[strategy.timeframe] ?? strategy.timeframe],
-            ["Starting balance", money(strategy.initial_capital)], ["Position size", entry.reference_breakout ? "Calculated from account risk and reference low" : money(strategy.position_size_usd)],
+            ["Trade direction", short ? "Short (sell to open, buy to cover)" : "Long (buy to open, sell to close)"],
+            ["Starting balance", money(strategy.initial_capital)], ["Position size", entry.reference_breakout ? short ? "Calculated from account risk and reference high" : "Calculated from account risk and reference low" : money(strategy.position_size_usd)],
           ]} />
           <h3>Entry</h3>
           <Values rows={[
@@ -71,10 +73,10 @@ export default function StrategyBuilder(props: Props) {
           {entry.pullback_breakout && <>
             <h3>Rally and pullback</h3>
             <Values rows={[
-              ["Minimum consecutive green candles", entry.pullback_breakout.rally_min_candles],
-              ["Minimum consecutive red candles", entry.pullback_breakout.pullback_min_candles],
-              ["Maximum consecutive red candles", entry.pullback_breakout.pullback_max_candles],
-              ["Breakout trigger", `First green candle's ${entry.pullback_breakout.breakout_by} above the first red candle's high`],
+              [short ? "Minimum consecutive red candles" : "Minimum consecutive green candles", entry.pullback_breakout.rally_min_candles],
+              [short ? "Minimum consecutive green candles" : "Minimum consecutive red candles", entry.pullback_breakout.pullback_min_candles],
+              [short ? "Maximum consecutive green candles" : "Maximum consecutive red candles", entry.pullback_breakout.pullback_max_candles],
+              ["Breakout trigger", short ? `First red candle breaks below the first green low by ${entry.pullback_breakout.breakout_by === "close" ? "close" : "low"}` : `First green candle's ${entry.pullback_breakout.breakout_by} above the first red candle's high`],
             ]} />
           </>}
           {entry.ai_trend && <>
@@ -89,11 +91,11 @@ export default function StrategyBuilder(props: Props) {
           {entry.reference_breakout && <>
             <h3>Reference breakout</h3>
             <Values rows={[
-              ["Reference", `Red candle in AI bearish trend; volume ≥ ${entry.reference_breakout.reference_volume_min}× previous ${entry.reference_breakout.volume_lookback} candles`],
-              ["Breakout", `Green candle in AI bullish trend; ${entry.reference_breakout.breakout_by} above marked high`],
+              ["Reference", `${short ? "Green candle in AI bullish trend" : "Red candle in AI bearish trend"}; volume ≥ ${entry.reference_breakout.reference_volume_min}× previous ${entry.reference_breakout.volume_lookback} candles`],
+              ["Breakout", short ? `Red candle in AI bearish trend; ${entry.reference_breakout.breakout_by === "close" ? "close" : "low"} below marked low` : `Green candle in AI bullish trend; ${entry.reference_breakout.breakout_by} above marked high`],
               ["Minimum momentum body / range", ratio(entry.reference_breakout.momentum_body_min)],
               ["Planned account risk", `${entry.reference_breakout.risk_account_pct}% including modeled costs`],
-              ["Stop", "Marked red candle's low"],
+              ["Stop", short ? "Marked green candle's high" : "Marked red candle's low"],
               ["Net account-profit target", `${entry.reference_breakout.target_account_pct}% of equity at entry`],
             ]} />
           </>}

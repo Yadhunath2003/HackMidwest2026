@@ -41,7 +41,7 @@ export default function LiveChart({ session }: { session: PaperSession }) {
       .sort((a, b) => a.time - b.time).map((s) => ({ id: s.id, time: s.time as UTCTimestamp,
         position: s.side === "BUY" ? "belowBar" as const : "aboveBar" as const,
         shape: s.side === "BUY" ? "arrowUp" as const : "arrowDown" as const,
-        color: s.side === "BUY" ? "#4f8cff" : "#ef5350", text: `${s.side} @ ${s.price.toFixed(2)}` })));
+        color: s.side === "BUY" ? "#4f8cff" : "#ef5350", text: `${s.direction === "short" ? (s.action === "entry" ? "SELL SHORT" : "BUY TO COVER") : s.side} @ ${s.price.toFixed(2)}` })));
     for (const line of priceLines.current) price.current.removePriceLine(line);
     priceLines.current = session.position ? [
       price.current.createPriceLine({ price: session.position.entry_price, color: "#4f8cff", lineWidth: 1, title: "Paper entry" }),

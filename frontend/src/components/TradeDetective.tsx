@@ -32,9 +32,10 @@ export default function TradeDetective({ runId, trade }: { runId: string; trade:
   }
 
   const signal = trade.entry_evidence;
+  const short = trade.direction === "short";
   const rows: [string, string][] = [
     ...(signal.reference_breakout ? [
-      ["Marked red candle (UTC)", formatTime(signal.reference_breakout.time)],
+      [short ? "Marked green candle (UTC)" : "Marked red candle (UTC)", formatTime(signal.reference_breakout.time)],
       ["Marked high / low", `${signal.reference_breakout.high} / ${signal.reference_breakout.low}`],
       ["Reference relative volume", `${signal.reference_breakout.relative_volume.toFixed(2)}x`],
       ["Reference trend", `${signal.reference_breakout.ai_trend.direction}: ${signal.reference_breakout.ai_trend.reason}`],
@@ -47,8 +48,8 @@ export default function TradeDetective({ runId, trade }: { runId: string; trade:
       ["Inferred trend start (UTC)", signal.ai_trend.start_time == null ? "Unavailable" : formatTime(signal.ai_trend.start_time)],
     ] as [string, string][] : []),
     ...(signal.pattern ? [
-      ["Rally / pullback", `At least ${signal.pattern.rally_min_candles} green candles, then ${signal.pattern.pullback_candles} red candles`],
-      ["Breakout", `${signal.pattern.breakout_by} ${signal.pattern.breakout_value} above first red candle high ${signal.pattern.first_red_high} (${formatTime(signal.pattern.first_red_time)} UTC)`],
+      ["Rally / pullback", short ? `At least ${signal.pattern.rally_min_candles} red candles, then ${signal.pattern.pullback_candles} green candles` : `At least ${signal.pattern.rally_min_candles} green candles, then ${signal.pattern.pullback_candles} red candles`],
+      ["Breakout", short ? `${signal.pattern.breakout_by} ${signal.pattern.breakout_value} below first green low ${signal.pattern.first_green_low}` : `${signal.pattern.breakout_by} ${signal.pattern.breakout_value} above first red candle high ${signal.pattern.first_red_high} (${formatTime(signal.pattern.first_red_time ?? 0)} UTC)`],
     ] as [string, string][] : []),
     ["Signal candle (UTC)", formatTime(signal.candle.time)],
     ["Signal candle OHLC", `${signal.candle.open} / ${signal.candle.high} / ${signal.candle.low} / ${signal.candle.close}`],
@@ -57,10 +58,10 @@ export default function TradeDetective({ runId, trade }: { runId: string; trade:
     ["Relative volume", signal.relative_volume == null ? "unavailable" : `${signal.relative_volume.toFixed(2)}x (previous ${signal.relative_volume_lookback} candles)`],
     ["Fast / slow average", signal.fast_ma == null ? "not used" : `${signal.fast_ma} / ${signal.slow_ma}`],
     ["RSI", signal.rsi == null ? "not used" : String(signal.rsi)],
-    ["Entry (UTC)", `${formatTime(trade.entry_time)} at ${trade.entry_price}`],
+    [short ? "Sell short entry (UTC)" : "Buy entry (UTC)", `${formatTime(trade.entry_time)} at ${trade.entry_price}`],
     ["Position", `${trade.shares} ${signal.candle.volume == null ? "troy ounces" : "shares"} (${money(trade.position_value)})`],
     ["Stop / target", `${trade.stop_price} / ${trade.target_price}`],
-    ["Exit (UTC)", `${formatTime(trade.exit_time)} at ${trade.exit_price}`],
+    [short ? "Buy to cover exit (UTC)" : "Sell exit (UTC)", `${formatTime(trade.exit_time)} at ${trade.exit_price}`],
     ["Exit trigger", trade.exit_evidence.trigger],
     ["Realized P&L", `${money(trade.pnl)} (${percent(trade.pnl_pct)})`],
     ["Costs", `${money(trade.fees)} commission, ${money(trade.slippage_cost)} slippage`],

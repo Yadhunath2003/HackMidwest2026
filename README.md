@@ -86,7 +86,7 @@ candidate entry points, so first runs can require many API calls. Results are ca
 model/endpoint and prompt version, saved with the run, and displayed in results and trade evidence.
 Stress tests reuse original judgments without AI calls. Split comparisons retain those judgments' original
 past context; newly arising candidates without recorded judgments are skipped. Model errors abort an
-initial backtest rather than silently substituting a trend rule. Short selling remains unsupported.
+initial backtest rather than silently substituting a trend rule. Short-only strategies are supported as hypothetical simulations; combined long/short strategies require separate definitions.
 
 ### High-volume reference breakout
 
@@ -245,3 +245,35 @@ Stopping freezes a session without closing its virtual position or issuing a SEL
 Keep the backend running to monitor markets, even if the browser is closed. Run
 **one backend worker**; multiple processes would duplicate monitoring. AI calls use
 the configured API and cached trend assessments; this does not impose a spending cap.
+# Free extended BTC/USD history
+
+From `backend`, run `python -m app.import_crypto_history`. This downloads only
+BTC/USD members from Kraken's public split ZIP archive using HTTP byte ranges,
+validates candles and ZIP CRCs, and imports two years ending at the archive's
+June 30, 2026 cutoff. Recent Kraken API candles are merged without deleting the
+archive. No credentials or AI requests are needed. The archive version is pinned
+in `app/import_crypto_history.py`; update it when Kraken publishes newer data.
+
+The five supported timeframes are imported; 30-minute candles require six complete
+5-minute bars. Cache files live in `backend/data/candles/BTCUSD_*.json` and survive
+app restarts. Metadata lists missing intervals; absent prices are never fabricated.
+Backtests use the largest segment without gaps longer than one day (or two candles
+for longer intervals), so hourly backtests may end June 30 rather than today.
+Restart the backend to load the new gap-handling code; this interrupts active jobs.
+
+
+### Short-selling simulations
+
+Generate a strategy with an explicit short/sell-to-open description, or choose
+Short in Advanced Mode (`direction: "short"`). Existing strategies default to Long.
+EMA/SMA short entries cross below, and reverse exits cross above, at the next open.
+Stops sit above entry and targets below it. Bearish pullback and mirrored AI
+reference-volume setups, account-risk sizing, partial covers, historical charts
+and paper signals support shorts. Charts label SELL SHORT and BUY TO COVER.
+
+Shorts reserve 100% entry-notional collateral from virtual equity; sale proceeds
+are not spendable. Borrow availability/costs, funding, margin liquidation and broker
+orders are not modeled. A strategy trades one direction only; generate separate
+long and short strategies. Restart the backend after active jobs finish to load
+the change. The independent verification script currently accepts long equity
+reference strategies only and rejects short runs explicitly.

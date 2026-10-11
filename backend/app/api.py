@@ -234,7 +234,8 @@ def get_backtest(run_id: str):
 @router.post("/backtest/{run_id}/report")
 def backtest_report(run_id: str):
     run = _require_run(run_id)
-    evidence = {key: run[key] for key in ("strategy", "execution", "metrics", "data", "assumptions")}
+    from .report_facts import evidence_for_run
+    evidence = evidence_for_run(run)
     try:
         return ai.generate_report(evidence)
     except ai.AIError as exc:
