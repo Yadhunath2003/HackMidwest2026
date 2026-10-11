@@ -1,8 +1,14 @@
 // Mirrors backend/app/schemas.py. The backend is the source of truth for validation.
 
-export type SymbolName = "AAPL" | "SPY" | "TSLA";
-export type Timeframe = "5m" | "1d";
-export type EntryType = "ema_crossover" | "sma_crossover" | "candle_only";
+export type SymbolName = "AAPL" | "SPY" | "TSLA" | "XAUUSD" | "BTCUSD";
+export type Timeframe = "5m" | "30m" | "1h" | "4h" | "1d";
+export type EntryType = "ema_crossover" | "sma_crossover" | "candle_only" | "bullish_pullback_breakout" | "ai_reference_breakout";
+
+export interface ReferenceBreakout {
+  reference_volume_min: number; volume_lookback: number; momentum_body_min: number;
+  breakout_by: "close" | "high"; context_candles: number; min_confidence: number;
+  risk_account_pct: number; target_account_pct: number;
+}
 
 export interface CandleConditions {
   direction?: "bullish" | "bearish";
@@ -14,6 +20,8 @@ export interface CandleConditions {
 }
 
 export interface Entry {
+  reference_breakout?: ReferenceBreakout;
+  ai_trend?: { direction: "bullish" | "bearish"; context_candles: number; min_confidence: number };
   type: EntryType;
   fast_period?: number;
   slow_period?: number;
@@ -21,9 +29,17 @@ export interface Entry {
   rsi_below?: number;
   rsi_above?: number;
   candle_conditions?: CandleConditions;
+  pullback_breakout?: {
+    rally_min_candles: number;
+    pullback_min_candles: number;
+    pullback_max_candles: number;
+    breakout_by: "close" | "high";
+  };
 }
 
 export interface Strategy {
+  volume_basis?: "traded" | "quote";
+  partial_exit?: { fraction: number; profit_pct: number; basis: "price" | "account" } | null;
   symbol: SymbolName;
   timeframe: Timeframe;
   entry: Entry;
@@ -39,16 +55,43 @@ export interface ExecutionSettings {
   slippage_bps: number;
 }
 
+export interface SavedStrategy {
+  id: string; name: string; run_id: string; created_at: string;
+  strategy: Strategy; execution: ExecutionSettings;
+}
+export interface PaperSignal {
+  id: string; side: "BUY" | "SELL"; time: number; detected_at: string;
+  quantity: number; price: number; reason: string; stop: number | null; target: number | null;
+}
+export interface FeedStatus { configured: boolean; provider: string; notice: string; required: string[] }
+export interface PaperSession {
+  candles: Candle[];
+  id: string; name: string; strategy_id: string; status: "running" | "stopped";
+  strategy: Strategy; cash: number; updated_at: string; last_candle: number | null;
+  position: { quantity: number; entry_price: number; stop: number; target: number } | null;
+  signals: PaperSignal[]; feed: FeedStatus; error: string | null; message: string;
+}
+
 export interface Candle {
   time: number;
   open: number;
   high: number;
   low: number;
   close: number;
-  volume: number;
+  volume: number | null;
 }
 
 export interface Snapshot {
+  reference_breakout?: { time: number; high: number; low: number; relative_volume: number; ai_trend: TrendAssessment } | null;
+  ai_trend?: TrendAssessment | null;
+  pattern?: {
+    rally_min_candles: number;
+    pullback_candles: number;
+    first_red_time: number;
+    first_red_high: number;
+    breakout_by: "close" | "high";
+    breakout_value: number;
+  } | null;
   candle: Candle;
   direction: string;
   body_to_range: number | null;
@@ -64,6 +107,12 @@ export interface Snapshot {
 }
 
 export interface Trade {
+  final_exit_price?: number;
+  partial_exit_skipped?: string | null;
+  exits?: { time: number; price: number; shares: number; reason: string; fee: number; trigger: string; gap?: boolean }[];
+  risk_budget?: number | null;
+  planned_stop_loss?: number | null;
+  target_account_profit?: number | null;
   id: number;
   signal_time: number;
   entry_time: number;
@@ -112,6 +161,8 @@ export interface DataMeta {
 }
 
 export interface BacktestRun {
+  ai_usage?: AIUsage;
+  trend_assessments?: Record<string, TrendAssessment>;
   id: string;
   created_at: string;
   strategy_version: string;
@@ -125,6 +176,25 @@ export interface BacktestRun {
   signals: { time: number; acted: boolean }[];
   equity_curve: { time: number; equity: number }[];
   candles: Candle[];
+}
+
+export interface AIUsage {
+  requests: number;
+  reported_requests: number;
+  unreported_requests: number;
+  cache_hits: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface TrendAssessment {
+  direction: "bullish" | "bearish" | "sideways" | "uncertain";
+  confidence: number;
+  start_time: number | null;
+  reason: string;
+  source: string;
+  context_start_time?: number;
 }
 
 export interface GenerateResponse {
@@ -154,8 +224,18 @@ export interface Explanation {
 }
 
 export interface StressTestResult {
+  ai_report: AIReport | null;
+  ai_error: string | null;
   baseline: { execution: ExecutionSettings; metrics: Metrics };
   stressed: { execution: ExecutionSettings; metrics: Metrics };
   split: Record<"in_sample" | "out_of_sample", { range: DataMeta; metrics: Metrics }> | null;
   notes: string[];
+}
+
+export interface AIReport {
+  summary: string;
+  findings: string[];
+  limitations: string[];
+  next_tests: string[];
+  source: string;
 }

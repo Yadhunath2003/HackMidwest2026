@@ -1,0 +1,47 @@
+{
+  "run_id": "a623eb31fc54",
+  "symbol": "TSLA",
+  "timeframe": "30m",
+  "engine": "Backtrader 1.9.78.123",
+  "app_trades": 3,
+  "backtrader_trades": 3,
+  "app_net_profit": -136.2,
+  "backtrader_net_profit": -136.2,
+  "missing_ai_judgments": [],
+  "differences": [],
+  "matched": true,
+  "backtrader_trade_details": [
+    {
+      "entry_time": 1776960000,
+      "entry_price": 380.916168,
+      "shares": 7,
+      "entry_fee": 1.0,
+      "exit_time": 1777296600,
+      "exit_price": 368.316322,
+      "pnl": -90.2
+    },
+    {
+      "entry_time": 1782750600,
+      "entry_price": 404.070798,
+      "shares": 3,
+      "entry_fee": 1.0,
+      "exit_time": 1784295000,
+      "exit_price": 378.47309024,
+      "pnl": -78.79
+    },
+    {
+      "entry_time": 1790951400,
+      "entry_price": 373.934772,
+      "shares": 4,
+      "entry_fee": 1.0,
+      "exit_time": 1791574200,
+      "exit_price": 382.63345799999996,
+      "pnl": 32.79
+    }
+  ],
+  "limitations": [
+    "Reuses saved AI decisions; validates execution, not AI trend accuracy.",
+    "Uses current cached candles with matching dates/count; original candle values were not saved with the run.",
+    "Custom broker models app adverse limit slippage and stop-first order priority."
+  ]
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AIReportView from "./AIReportView";
 import { ApiError, api, money, percent } from "@/lib/api";
 import type { BacktestRun, Metrics, StressTestResult } from "@/lib/types";
 
@@ -120,6 +121,8 @@ export default function ReliabilityReport({ run }: { run: BacktestRun }) {
           {result.notes.map((note) => (
             <div className="notice warn" key={note}>{note}</div>
           ))}
+          {result.ai_report && <AIReportView report={result.ai_report} />}
+          {result.ai_error && <div className="notice warn">AI analysis unavailable: {result.ai_error}. The calculated comparisons are still shown above.</div>}
         </>
       )}
     </section>
