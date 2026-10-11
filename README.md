@@ -261,6 +261,12 @@ Backtests use the largest segment without gaps longer than one day (or two candl
 for longer intervals), so hourly backtests may end June 30 rather than today.
 Restart the backend to load the new gap-handling code; this interrupts active jobs.
 
+In Docker this import is automatic: the backend container runs `python -m app.ensure_history`
+before starting, which imports the archive when any BTC/USD timeframe has less than a year of
+cached history and otherwise does nothing. If the archive is unreachable the backend still
+starts with Kraken's recent candles; rerun the importer with
+`docker compose exec backend python -m app.import_crypto_history`.
+
 
 ### Short-selling simulations
 

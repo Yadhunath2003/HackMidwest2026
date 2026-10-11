@@ -9,7 +9,7 @@ services:
       - path: backend/.env  # team key; optional so the app still starts without it
         required: false
     volumes:
-      - strategylab-data:/app/data  # SQLite database and candle cache survive restarts
+      - strategylab-data:/app/data  # SQLite database, candle cache and imported BTC history survive restarts
     restart: unless-stopped
 
   frontend:
