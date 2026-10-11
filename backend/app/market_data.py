@@ -35,10 +35,15 @@ def get_candles(symbol: str, timeframe: str, refresh: bool = False) -> tuple[lis
             segments[-1].append(candle)
         if len(segments) > 1:
             selected = max(segments, key=len)
+            from .import_crypto_history import coverage
+            archive_limitations = [note for note in meta['limitations'] if not note.startswith('History has ')]
             meta = {**meta, **describe_range(selected), 'limitations': list(meta['limitations']) + [
                 'Backtesting uses the largest history segment without gaps longer than one day (or two candles for longer intervals). Other cached segments are excluded to avoid trading across missing months.'],
                 'excluded_segment_candles': len(candles) - len(selected)}
             candles = selected
+            meta['limitations'] = archive_limitations + [meta['limitations'][-1]]
+            meta['cache_coverage'] = meta.get('coverage')
+            meta['coverage'] = coverage(selected, CANDLE_SECONDS[timeframe])
     return candles, meta
 
 
