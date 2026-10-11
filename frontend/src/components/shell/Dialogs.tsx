@@ -114,3 +114,49 @@ export function SaveStrategyDialog({ run, open, onOpenChange, onSaved }: { run: 
     </Dialog>
   );
 }
+
+/** Delete a saved strategy. Its backtest and signal history remain; a running paper session blocks it (409). */
+export function DeleteStrategyDialog({ strategy, onOpenChange, onDeleted }: {
+  strategy: { id: string; name: string } | null; onOpenChange: (open: boolean) => void; onDeleted: (id: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setError(null); setBusy(false); }, [strategy?.id]);
+
+  async function confirm() {
+    if (!strategy) return;
+    setBusy(true); setError(null);
+    try {
+      await api.deleteStrategy(strategy.id);
+      onDeleted(strategy.id);
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 409
+        ? "This strategy is in use by a running paper session. Stop the session first."
+        : e instanceof ApiError && e.status === 404
+          ? "This saved strategy no longer exists. It may already have been deleted."
+          : e instanceof ApiError ? e.message : "Can't reach the server. Is the backend running?");
+      if (e instanceof ApiError && e.status === 404) onDeleted(strategy.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AlertDialog open={strategy != null} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete saved strategy{strategy ? ` “${strategy.name}”` : ""}?</AlertDialogTitle>
+          <AlertDialogDescription>Its backtest and signal history will remain. This can&apos;t be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? <Notice tone="error" title="Couldn't delete">{error}</Notice> : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <Button variant="destructive" size="lg" disabled={busy} onClick={() => void confirm()}>
+            {busy ? <Loader2 aria-hidden className="animate-spin" /> : null}Delete strategy
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}

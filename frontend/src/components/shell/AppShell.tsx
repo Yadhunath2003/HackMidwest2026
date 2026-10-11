@@ -64,8 +64,8 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** Sidebar | top bar over the screen. Under 1200px the sidebar moves into a Sheet. */
-export function AppShell({ screen, section, title, runId, onSaveRun, onSelectRun, onNew, children }: {
-  screen: "backtest" | "paper"; section: string; title?: string; runId?: string | null;
+export function AppShell({ screen, section, title, badges, runId, onSaveRun, onSelectRun, onNew, children }: {
+  screen: "backtest" | "paper"; section: string; title?: string; badges?: React.ReactNode; runId?: string | null;
   onSaveRun?: () => void; onSelectRun?: (id: string) => void; onNew?: () => void; children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -93,7 +93,7 @@ export function AppShell({ screen, section, title, runId, onSaveRun, onSelectRun
       </Sheet>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar section={section} title={title} connection={connection} runId={runId}
+        <TopBar section={section} title={title} badges={badges} connection={connection} runId={runId}
           onSave={onSaveRun} onDelete={() => runId && requestDeleteRun(runId)}
           onToggleSidebar={() => (window.matchMedia("(min-width: 1200px)").matches ? setCollapsed((c) => !c) : setSheetOpen(true))} />
         <main className="min-h-0 flex-1">{children}</main>

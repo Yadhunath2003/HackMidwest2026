@@ -41,10 +41,10 @@ export function TopBar({ section, title, badges, connection, runId, onSave, onDe
       <Button variant="ghost" size="icon-lg" aria-label="Toggle sidebar" onClick={onToggleSidebar}><PanelLeft aria-hidden /></Button>
       <span aria-hidden className="h-5 w-px bg-border" />
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">{section}</span>
+        <span className="hidden whitespace-nowrap text-muted-foreground sm:inline">{section}</span>
         {title ? (
           <>
-            <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            <ChevronRight aria-hidden className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
             <span className="truncate font-semibold">{title}</span>
           </>
         ) : null}

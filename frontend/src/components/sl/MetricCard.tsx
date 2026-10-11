@@ -13,9 +13,9 @@ export function MetricCard({ value, unit, prefix, label, delta, context, size = 
   const small = size === "sm";
   return (
     <div className={cn("rounded-2xl border bg-card shadow-sm", small ? "p-3.5" : "p-5")}>
-      <p className="flex items-baseline gap-1 tabular-nums">
+      <p className="flex min-w-0 items-baseline gap-1 tabular-nums">
         {prefix ? <span className={cn("font-medium text-muted-foreground", small ? "text-sm" : "text-lg")}>{prefix}</span> : null}
-        <span className={cn("font-bold tracking-tight", small ? "text-2xl" : "text-[44px] leading-[48px]")}>{value}</span>
+        <span className={cn("font-bold tracking-tight", small ? "text-xl" : "text-[44px] leading-[48px]")}>{value}</span>
         {unit ? <span className={cn("font-medium text-muted-foreground", small ? "text-sm" : "text-[22px]")}>{unit}</span> : null}
       </p>
       <p className={cn("text-muted-foreground", small ? "mt-0.5 text-[13px]" : "mt-1 text-sm")}>{label}</p>
